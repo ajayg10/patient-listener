@@ -19,27 +19,53 @@ archetypes:
     filler_prob: 0.10
     continuation_prob: 0.30
     users:
-      - id: "user_fast_01"
+      # 5 Dev Users
+      - id: "user_fast_dev_01"
         split: "dev"
         jitter_ms: -30
       - id: "user_fast_dev_02"
         split: "dev"
-        jitter_ms: -10
+        jitter_ms: -20
       - id: "user_fast_dev_03"
         split: "dev"
-        jitter_ms: +15
+        jitter_ms: -10
       - id: "user_fast_dev_04"
         split: "dev"
-        jitter_ms: -20
-      - id: "user_fast_02"
-        split: "test"
         jitter_ms: 0
-      - id: "user_fast_03"
+      - id: "user_fast_dev_05"
+        split: "dev"
+        jitter_ms: +20
+      # 10 Test Users
+      - id: "user_fast_test_01"
         split: "test"
-        jitter_ms: +25
-      - id: "user_fast_04"
+        jitter_ms: -35
+      - id: "user_fast_test_02"
+        split: "test"
+        jitter_ms: -25
+      - id: "user_fast_test_03"
+        split: "test"
+        jitter_ms: -20
+      - id: "user_fast_test_04"
         split: "test"
         jitter_ms: -15
+      - id: "user_fast_test_05"
+        split: "test"
+        jitter_ms: -10
+      - id: "user_fast_test_06"
+        split: "test"
+        jitter_ms: 0
+      - id: "user_fast_test_07"
+        split: "test"
+        jitter_ms: +10
+      - id: "user_fast_test_08"
+        split: "test"
+        jitter_ms: +15
+      - id: "user_fast_test_09"
+        split: "test"
+        jitter_ms: +25
+      - id: "user_fast_test_10"
+        split: "test"
+        jitter_ms: +35
 
   slow_pauser:
     name: "Slow Pauser (Deliberate / Elderly)"
@@ -57,27 +83,53 @@ archetypes:
     filler_prob: 0.25
     continuation_prob: 0.50
     users:
-      - id: "user_slow_01"
+      # 5 Dev Users
+      - id: "user_slow_dev_01"
         split: "dev"
-        jitter_ms: +50
+        jitter_ms: -30
       - id: "user_slow_dev_02"
         split: "dev"
-        jitter_ms: +30
+        jitter_ms: -15
       - id: "user_slow_dev_03"
         split: "dev"
-        jitter_ms: -20
+        jitter_ms: 0
       - id: "user_slow_dev_04"
         split: "dev"
+        jitter_ms: +20
+      - id: "user_slow_dev_05"
+        split: "dev"
         jitter_ms: +40
-      - id: "user_slow_02"
-        split: "test"
-        jitter_ms: 0
-      - id: "user_slow_03"
+      # 10 Test Users
+      - id: "user_slow_test_01"
         split: "test"
         jitter_ms: -40
-      - id: "user_slow_04"
+      - id: "user_slow_test_02"
         split: "test"
-        jitter_ms: +60
+        jitter_ms: -30
+      - id: "user_slow_test_03"
+        split: "test"
+        jitter_ms: -20
+      - id: "user_slow_test_04"
+        split: "test"
+        jitter_ms: -10
+      - id: "user_slow_test_05"
+        split: "test"
+        jitter_ms: 0
+      - id: "user_slow_test_06"
+        split: "test"
+        jitter_ms: +10
+      - id: "user_slow_test_07"
+        split: "test"
+        jitter_ms: +20
+      - id: "user_slow_test_08"
+        split: "test"
+        jitter_ms: +30
+      - id: "user_slow_test_09"
+        split: "test"
+        jitter_ms: +40
+      - id: "user_slow_test_10"
+        split: "test"
+        jitter_ms: +50
 
   filler_heavy:
     name: "Filler-Heavy Pauser (Hesitant / Anxious)"
@@ -95,25 +147,50 @@ archetypes:
     filler_prob: 0.85
     continuation_prob: 0.65
     users:
-      - id: "user_filler_01"
+      # 5 Dev Users
+      - id: "user_filler_dev_01"
         split: "dev"
-        jitter_ms: -20
+        jitter_ms: -25
       - id: "user_filler_dev_02"
         split: "dev"
-        jitter_ms: +10
+        jitter_ms: -15
       - id: "user_filler_dev_03"
         split: "dev"
-        jitter_ms: -10
+        jitter_ms: 0
       - id: "user_filler_dev_04"
         split: "dev"
-        jitter_ms: +20
-      - id: "user_filler_02"
-        split: "test"
+        jitter_ms: +15
+      - id: "user_filler_dev_05"
+        split: "dev"
         jitter_ms: +30
-      - id: "user_filler_03"
+      # 10 Test Users
+      - id: "user_filler_test_01"
+        split: "test"
+        jitter_ms: -35
+      - id: "user_filler_test_02"
+        split: "test"
+        jitter_ms: -25
+      - id: "user_filler_test_03"
+        split: "test"
+        jitter_ms: -20
+      - id: "user_filler_test_04"
+        split: "test"
+        jitter_ms: -10
+      - id: "user_filler_test_05"
         split: "test"
         jitter_ms: 0
-      - id: "user_filler_04"
+      - id: "user_filler_test_06"
+        split: "test"
+        jitter_ms: +10
+      - id: "user_filler_test_07"
+        split: "test"
+        jitter_ms: +20
+      - id: "user_filler_test_08"
+        split: "test"
+        jitter_ms: +25
+      - id: "user_filler_test_09"
+        split: "test"
+        jitter_ms: +35
+      - id: "user_filler_test_10"
         split: "test"
         jitter_ms: +45
-

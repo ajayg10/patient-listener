@@ -184,6 +184,22 @@ TEST_TEMPLATES = [
 ]
 
 
+CONTINUATIONS: dict[str, str] = {
+    # Dev
+    "tmpl_dev_01": "they told me the doctor hasn't submitted the renewal yet.",
+    "tmpl_dev_02": "the online portal still hasn't posted the report.",
+    "tmpl_dev_03": "I am calling to report a new symptom.",
+    "tmpl_dev_04": "I wasn't sure if registration closes early today.",
+    # Test
+    "tmpl_test_01": "Tuesday afternoon would work much better for my schedule.",
+    "tmpl_test_02": "I need to understand what portion of the charge I owe.",
+    "tmpl_test_03": "the billing statement listed an unexpected facility fee.",
+    "tmpl_test_04": "I haven't received any confirmation call from their office.",
+    "tmpl_test_05": "I need to verify the clinic faxed the paperwork.",
+    "tmpl_test_06": "the joint is still throbbing and painful this morning.",
+}
+
+
 def load_personas() -> dict[str, Any]:
     with open(DATA_DIR / "personas.yaml", "r", encoding="utf-8") as f:
         return yaml.safe_load(f)["archetypes"]
@@ -194,6 +210,12 @@ def sample_pause_ms(mean: float, std: float, min_ms: float, max_ms: float, jitte
     return int(max(min_ms, min(max_ms, val)))
 
 
+def compute_user_p_continuation(persona_info: dict[str, Any], jitter_ms: float) -> float:
+    """Compute individual user continuation probability modulated by user jitter."""
+    base_cont_prob = persona_info.get("continuation_prob", 0.40)
+    return max(0.05, min(0.95, base_cont_prob + (jitter_ms / 200.0)))
+
+
 def generate_scenario_turn(
     user_info: dict[str, Any],
     persona_info: dict[str, Any],
@@ -201,6 +223,7 @@ def generate_scenario_turn(
     turn_category: str,  # "complete" | "incomplete" | "ambiguous"
     turn_index: int,
     start_t: float = 0.0,
+    force_is_turn_complete: bool | None = None,
 ) -> dict[str, Any]:
     """Generate a single scenario with realistic timed audio events and ground-truth label."""
     user_id = user_info["id"]
@@ -217,23 +240,19 @@ def generate_scenario_turn(
         is_turn_complete = False
         syntactically_complete = False
     elif turn_category == "ambiguous":
-        # Ambiguous: syntactically complete text, but ground truth continuation is sampled
-        # per persona continuation probability modulated by per-user pause jitter
         raw_text = random.choice(template["ambiguous_utterances"])
         text = raw_text if raw_text.endswith((".", "?", "!")) else f"{raw_text}."
         syntactically_complete = True
-
-        base_cont_prob = persona_info.get("continuation_prob", 0.40)
-        # Per-user pause jitter shifts continuation probability: slower/hesitant users continue more often
-        user_cont_prob = max(0.05, min(0.95, base_cont_prob + (jitter / 200.0)))
-
-        is_turn_complete = (random.random() >= user_cont_prob)
+        if force_is_turn_complete is not None:
+            is_turn_complete = force_is_turn_complete
+        else:
+            user_cont_prob = compute_user_p_continuation(persona_info, jitter)
+            is_turn_complete = (random.random() >= user_cont_prob)
     else:
         raise ValueError(f"Unknown turn category: {turn_category}")
 
     # 2. Timing calculation
     words = text.split()
-    # Average speaking rate: ~150-180 words per minute -> ~350-400 ms per word
     speech_duration_ms = len(words) * 350.0
 
     speech_start_t = start_t
@@ -247,6 +266,13 @@ def generate_scenario_turn(
         )
         ground_truth = "RESPOND"
         turn_end_t = speech_end_t
+        resumed_text = None
+        full_text = text
+        events = [
+            {"type": "SpeechStarted", "timestamp_ms": round(speech_start_t, 1)},
+            {"type": "SpeechDelta", "text": text, "timestamp_ms": round(speech_start_t + 150.0, 1)},
+            {"type": "SpeechEnded", "timestamp_ms": round(speech_end_t, 1)},
+        ]
     else:
         pause_cfg = persona_info["mid_thought_pause"]
         silence_ms = sample_pause_ms(
@@ -254,14 +280,22 @@ def generate_scenario_turn(
             pause_cfg["min_ms"], pause_cfg["max_ms"], jitter,
         )
         ground_truth = "WAIT"
-        turn_end_t = speech_end_t + silence_ms + 1000.0  # speaker continues speaking later
+        resumed_text = CONTINUATIONS.get(template["id"], "could you please verify that for me?")
+        full_text = f"{text.rstrip('. ')} {resumed_text}"
 
-    # 3. Construct timed events conforming to events.py schema
-    events = [
-        {"type": "SpeechStarted", "timestamp_ms": round(speech_start_t, 1)},
-        {"type": "SpeechDelta", "text": text, "timestamp_ms": round(speech_start_t + 150.0, 1)},
-        {"type": "SpeechEnded", "timestamp_ms": round(speech_end_t, 1)},
-    ]
+        resume_start_t = speech_end_t + silence_ms
+        resume_dur_ms = len(resumed_text.split()) * 350.0
+        resume_end_t = resume_start_t + resume_dur_ms
+        turn_end_t = resume_end_t
+
+        events = [
+            {"type": "SpeechStarted", "timestamp_ms": round(speech_start_t, 1)},
+            {"type": "SpeechDelta", "text": text, "timestamp_ms": round(speech_start_t + 150.0, 1)},
+            {"type": "SpeechEnded", "timestamp_ms": round(speech_end_t, 1)},
+            {"type": "SpeechStarted", "timestamp_ms": round(resume_start_t, 1)},
+            {"type": "SpeechDelta", "text": resumed_text, "timestamp_ms": round(resume_start_t + 150.0, 1)},
+            {"type": "SpeechEnded", "timestamp_ms": round(resume_end_t, 1)},
+        ]
 
     return {
         "id": f"turn_{user_id}_{template['id']}_{turn_index:03d}",
@@ -272,6 +306,8 @@ def generate_scenario_turn(
         "domain": template["domain"],
         "category": turn_category,
         "text": text,
+        "full_text": full_text,
+        "resumed_text": resumed_text,
         "syntactically_complete": syntactically_complete,
         "is_turn_complete": is_turn_complete,
         "ground_truth": ground_truth,
@@ -285,12 +321,12 @@ def generate_scenario_turn(
 
 
 def generate_dataset() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    """Generate synthetic dev, test, and history datasets with zero user/template leakage."""
+    """Generate synthetic dev (15 users, 180 turns), test (30 users, 360 turns), and history datasets."""
     random.seed(42)  # Deterministic dataset generation
     personas = load_personas()
 
-    dev_users = []
-    test_users = []
+    dev_users: list[dict[str, Any]] = []
+    test_users: list[dict[str, Any]] = []
 
     for archetype_key, p in personas.items():
         for u in p["users"]:
@@ -300,7 +336,7 @@ def generate_dataset() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list
             else:
                 test_users.append(u_meta)
 
-    # 1. Generate History Turns per user (5 history turns per user for B6 profile building)
+    # 1. Generate History Turns per user (5 history sessions = 10 pauses per user)
     user_histories: list[dict[str, Any]] = []
     for u in dev_users + test_users:
         user_id = u["id"]
@@ -315,45 +351,67 @@ def generate_dataset() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list
             end_p = sample_pause_ms(end_cfg["mean_ms"], end_cfg["std_ms"], end_cfg["min_ms"], end_cfg["max_ms"], jitter)
             observed_pauses.extend([mid_p, end_p])
 
+        sorted_pauses = sorted(observed_pauses)
         user_histories.append({
             "user_id": user_id,
             "persona_name": persona_info["name"],
+            "archetype": u["archetype"],
+            "jitter_ms": jitter,
             "observed_pauses_ms": observed_pauses,
+            "median_pause_ms": sorted_pauses[len(sorted_pauses) // 2],
             "sample_count": len(observed_pauses),
             "generation_method": "template",
         })
 
-    # 2. Generate Dev Turns (12 users x 4 dev templates x 4 turns = 192 turns)
+    # 2. Generate Dev Turns (15 dev users x 12 turns = 180 turns)
     dev_turns: list[dict[str, Any]] = []
     turn_idx = 0
-    dev_categories = ["complete", "incomplete", "ambiguous", "ambiguous"]
 
     for u in dev_users:
-        for tmpl in DEV_TEMPLATES:
-            for cat in dev_categories:
-                turn_idx += 1
-                turn = generate_scenario_turn(u, u["persona"], tmpl, cat, turn_idx)
-                dev_turns.append(turn)
+        jitter = u.get("jitter_ms", 0)
+        p_user = compute_user_p_continuation(u["persona"], jitter)
+        # 6 ambiguous turns per user with stratified quota
+        k_cont = int(round(6 * p_user))
+        ambig_outcomes = [False] * k_cont + [True] * (6 - k_cont)
+        random.shuffle(ambig_outcomes)
 
-    # 3. Generate Test Turns (9 test users x 6 test templates x 6 turns = 324 turns)
-    # 50% ambiguous (162 turns), 25% complete (81 turns), 25% incomplete (81 turns)
+        categories = ["ambiguous"] * 6 + ["complete"] * 3 + ["incomplete"] * 3
+        random.shuffle(categories)
+
+        # 4 templates x 3 repeats = 12 turns
+        tmpl_cycle = (DEV_TEMPLATES * 3)[:12]
+
+        for tmpl, cat in zip(tmpl_cycle, categories):
+            turn_idx += 1
+            force_c = ambig_outcomes.pop() if cat == "ambiguous" else None
+            turn = generate_scenario_turn(u, u["persona"], tmpl, cat, turn_idx, force_is_turn_complete=force_c)
+            dev_turns.append(turn)
+
+    # 3. Generate Test Turns (30 test users x 12 turns = 360 turns)
     test_turns: list[dict[str, Any]] = []
     turn_idx = 0
 
     for u in test_users:
-        for tmpl_idx, tmpl in enumerate(TEST_TEMPLATES):
-            # Alternating distribution across templates yields exactly 81 complete, 81 incomplete, 162 ambiguous
-            if tmpl_idx % 2 == 0:
-                test_categories = ["complete", "complete", "incomplete", "ambiguous", "ambiguous", "ambiguous"]
-            else:
-                test_categories = ["complete", "incomplete", "incomplete", "ambiguous", "ambiguous", "ambiguous"]
-            for cat in test_categories:
-                turn_idx += 1
-                turn = generate_scenario_turn(u, u["persona"], tmpl, cat, turn_idx)
-                test_turns.append(turn)
+        jitter = u.get("jitter_ms", 0)
+        p_user = compute_user_p_continuation(u["persona"], jitter)
+        # 6 ambiguous turns per user with stratified quota
+        k_cont = int(round(6 * p_user))
+        ambig_outcomes = [False] * k_cont + [True] * (6 - k_cont)
+        random.shuffle(ambig_outcomes)
+
+        categories = ["ambiguous"] * 6 + ["complete"] * 3 + ["incomplete"] * 3
+        random.shuffle(categories)
+
+        # 6 templates x 2 repeats = 12 turns
+        tmpl_cycle = (TEST_TEMPLATES * 2)[:12]
+
+        for tmpl, cat in zip(tmpl_cycle, categories):
+            turn_idx += 1
+            force_c = ambig_outcomes.pop() if cat == "ambiguous" else None
+            turn = generate_scenario_turn(u, u["persona"], tmpl, cat, turn_idx, force_is_turn_complete=force_c)
+            test_turns.append(turn)
 
     return dev_turns, test_turns, user_histories
-
 
 
 def save_datasets() -> None:
@@ -373,11 +431,21 @@ def save_datasets() -> None:
         for h in user_histories:
             f.write(json.dumps(h) + "\n")
 
+    # Leakage assertion
+    dev_users = set(t["user_id"] for t in dev_turns)
+    test_users = set(t["user_id"] for t in test_turns)
+    dev_templates = set(t["scenario_template_id"] for t in dev_turns)
+    test_templates = set(t["scenario_template_id"] for t in test_turns)
+    assert len(dev_users & test_users) == 0, f"User leakage detected: {dev_users & test_users}"
+    assert len(dev_templates & test_templates) == 0, f"Template leakage detected: {dev_templates & test_templates}"
+
     print("[generate_dataset] SYNTHETIC Dataset Generated Successfully:")
-    print(f"  - Dev turns: {len(dev_turns)} turns")
-    print(f"  - Test turns: {len(test_turns)} turns (Requirement: >= 300 turns; Actual: {len(test_turns)})")
-    print(f"  - User histories: {len(user_histories)} user profiles")
+    print(f"  - Dev turns: {len(dev_turns)} turns ({len(dev_users)} users, 12 turns/user)")
+    print(f"  - Test turns: {len(test_turns)} turns ({len(test_users)} users, 12 turns/user)")
+    print(f"  - User histories: {len(user_histories)} profiles (10 pause events each)")
+    print("  - Leakage check: PASS (0 user overlap, 0 template overlap)")
 
 
 if __name__ == "__main__":
     save_datasets()
+
