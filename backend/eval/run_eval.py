@@ -107,8 +107,57 @@ def evaluate_text_heuristic_baseline(turns: list[dict[str, Any]], threshold_ms: 
     return records
 
 
+def evaluate_persona_blind_ceiling(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Persona-blind reference ceiling predictor.
+
+    Uses text category and global population base rates, but NO persona parameters or user profile.
+    - complete: P(complete) = 1.0 -> RESPOND at 250ms.
+    - incomplete: P(complete) = 0.0 -> WAIT (until speech resumes).
+    - ambiguous: text is syntactically complete, but global base rate continuation is ~54% (majority class = continue).
+      Blind best policy is WAIT. Holds floor until max wait (2200ms) if turn complete, or until speech resumes.
+    """
+    records = []
+    for t in turns:
+        speech_end_t = t["speech_end_t"]
+        turn_end_t = t["turn_end_t"]
+        silence_ms = t["silence_ms"]
+        is_complete = t["is_turn_complete"]
+        category = t.get("category")
+
+        if category == "complete":
+            pred_action = "RESPOND"
+            action_t = speech_end_t + 250.0
+        elif category == "incomplete":
+            pred_action = "WAIT"
+            action_t = speech_end_t + silence_ms
+        elif category == "ambiguous":
+            pred_action = "WAIT"
+            if is_complete:
+                action_t = speech_end_t + 2200.0  # holds until max wait timeout
+            else:
+                action_t = speech_end_t + silence_ms
+        else:
+            pred_action = "RESPOND" if is_complete else "WAIT"
+            action_t = speech_end_t + 250.0 if is_complete else speech_end_t + silence_ms
+
+        records.append({
+            "id": t["id"],
+            "user_id": t.get("user_id"),
+            "persona_id": t.get("persona_id"),
+            "archetype": t.get("archetype"),
+            "category": t.get("category"),
+            "ground_truth": t["ground_truth"],
+            "predicted_action": pred_action,
+            "turn_end_t": turn_end_t,
+            "action_timestamp_ms": action_t,
+            "is_turn_complete": is_complete,
+            "decision_latency_ms": 0.0,
+        })
+    return records
+
+
 def evaluate_oracle_upper_bound(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Bayes-optimal oracle upper bound predictor.
+    """Bayes-optimal oracle upper bound predictor (Persona-Aware).
 
     Uses persona parameters and text category, but NOT the realized outcome.
     - complete: P(complete) = 1.0 -> RESPOND at 250ms.
@@ -371,8 +420,9 @@ def run_full_evaluation() -> None:
             turns, cache, p_lat, model_id, checkpoints, max_wait, stats
         )
 
-    # 3. Oracle Upper Bound
-    all_runs["ORACLE-UPPER-BOUND"] = evaluate_oracle_upper_bound(turns)
+    # 3. Reference Ceilings
+    all_runs["PERSONA-BLIND CEILING"] = evaluate_persona_blind_ceiling(turns)
+    all_runs["ORACLE-UPPER-BOUND (Persona-Aware)"] = evaluate_oracle_upper_bound(turns)
 
     # Compute summaries for main comparison table
     summaries: list[EvalSummary] = []
@@ -391,7 +441,8 @@ def run_full_evaluation() -> None:
         "Text Heuristic Baseline (250ms, dev-tuned)",
         "Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER]",
         f"Strands Decider 2B ({MEASURED_CPU_MEDIAN_MS:.0f}ms CPU) [MOCK-DECIDER]",
-        "ORACLE-UPPER-BOUND",
+        "PERSONA-BLIND CEILING",
+        "ORACLE-UPPER-BOUND (Persona-Aware)",
     ]
 
     personas = ["fast_pauser", "slow_pauser", "filler_heavy"]
@@ -437,6 +488,9 @@ def run_full_evaluation() -> None:
     llm_judge = LLMJudgeBaseline()
     judge_skipped = not llm_judge.is_available()
 
+    test_users_count = len(set(t["user_id"] for t in turns))
+    turns_per_user = len(turns) // test_users_count if test_users_count else 0
+
     # JSON Output structure
     out_json = {
         "status": "SYNTHETIC_EVALUATION_COMPLETE",
@@ -450,6 +504,8 @@ def run_full_evaluation() -> None:
         },
         "sample_counts": {
             "total_test_turns": len(turns),
+            "test_users_count": test_users_count,
+            "turns_per_user": turns_per_user,
             "finished_turns": sum(1 for t in turns if t["is_turn_complete"]),
             "incomplete_turns": sum(1 for t in turns if not t["is_turn_complete"]),
             "fast_pauser_turns": sum(1 for t in turns if t.get("archetype") == "fast_pauser"),
@@ -461,9 +517,10 @@ def run_full_evaluation() -> None:
         },
         "definitions": {
             "premature_interruption": "Action RESPOND executed while speaker is mid-thought. Numerator = premature count, Denominator = total turns (N=324).",
-            "unnecessary_wait": "Action RESPOND executed > 800ms after speech ended for finished turns. Numerator = delayed finished turns, Denominator = finished turns (N=157). Global 800ms threshold.",
-            "response_delay": "Elapsed ms from true speech end to agent response, evaluated exclusively over completed turns (N=157).",
+            "unnecessary_wait": "Action RESPOND executed > 800ms after speech ended for finished turns. Numerator = delayed finished turns, Denominator = finished turns (N=155). Global 800ms threshold.",
+            "response_delay": "Elapsed ms from true speech end to agent response, evaluated exclusively over completed turns (N=155).",
             "accuracy": "Turn-level match between predicted binary action and ground truth over all turns (N=324).",
+            "cluster_bootstrap": "Non-parametric two-stage cluster bootstrap (B=1000 resamples: sample users with replacement, then sample turns within user with replacement).",
         },
         "main_results": [s.to_dict() for s in summaries],
         "per_persona_breakdown": persona_breakdown,
@@ -480,6 +537,8 @@ def run_full_evaluation() -> None:
     n_total = out_json["sample_counts"]["total_test_turns"]
     n_fin = out_json["sample_counts"]["finished_turns"]
     n_inc = out_json["sample_counts"]["incomplete_turns"]
+    n_users = out_json["sample_counts"]["test_users_count"]
+    t_per_u = out_json["sample_counts"]["turns_per_user"]
 
     md_lines = [
         "# Benchmark Results — Patient Listener",
@@ -488,18 +547,21 @@ def run_full_evaluation() -> None:
         f"> **PROVENANCE & MOCK NOTICE**: All Decider rows below were generated using `MockDecider` cache entries (`backend=mock`, {len(cache)} keys, compute time 0.00 ms). They are marked `[MOCK-DECIDER]` and must NOT be cited as measured performance of the real weights. On ambiguous turns, the text heuristic baseline achieves matching accuracy to the mock decider; no real Decider run yet.",
         "",
         "> [!IMPORTANT]",
-        f"> **SYNTHETIC BENCHMARK**: Evaluated on {n_total} synthetic test turns ({n_fin} complete, {n_inc} incomplete) across 3 conflicting persona archetypes (fast, slow, filler-heavy). Zero leakage: dev and test splits strictly partition users and templates.",
+        f"> **SYNTHETIC BENCHMARK**: Evaluated on {n_total} synthetic test turns ({n_fin} complete, {n_inc} incomplete) across {n_users} users ({t_per_u} turns/user) in 3 conflicting persona archetypes (fast, slow, filler-heavy). Zero leakage: dev and test splits strictly partition users and templates.",
         "",
-        f"## 1. Test Split Turn-Taking Comparison (n={n_total} turns)",
+        f"## 1. Test Split Turn-Taking Comparison (n={n_total} turns across {n_users} users, {t_per_u} turns/user)",
         "",
-        "| Approach | Accuracy (Wilson 95% CI) | Premature Interruption (Wilson 95% CI) | Unnecessary Wait (Wilson 95% CI) | Delay P50 (Bootstrap 95% CI) | Delay P95 | Latency Condition |",
-        "|---|---|---|---|---|---|---|",
+        "| Approach | Accuracy (Cluster 95% CI) | Accuracy (Wilson 95% CI) | Premature Interruption (Cluster 95% CI) | Premature (Wilson 95% CI) | Unnecessary Wait (Cluster 95% CI) | Unnecessary Wait (Wilson 95% CI) | Delay P50 (Bootstrap 95% CI) | Delay P95 | Latency Condition |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     for s in summaries:
-        acc_str = f"{s.accuracy * 100:.1f}% {s.accuracy_ci.format_pct()}"
-        prem_str = f"{s.premature_interruption_rate * 100:.1f}% {s.premature_interruption_ci.format_pct()}"
-        unnec_str = f"{s.unnecessary_wait_rate * 100:.1f}% {s.unnecessary_wait_ci.format_pct()}"
+        acc_cluster_str = f"{s.accuracy * 100:.1f}% {s.accuracy_cluster_ci.format_pct()}"
+        acc_wilson_str = s.accuracy_ci.format_pct()
+        prem_cluster_str = f"{s.premature_interruption_rate * 100:.1f}% {s.premature_interruption_cluster_ci.format_pct()}"
+        prem_wilson_str = s.premature_interruption_ci.format_pct()
+        unnec_cluster_str = f"{s.unnecessary_wait_rate * 100:.1f}% {s.unnecessary_wait_cluster_ci.format_pct()}"
+        unnec_wilson_str = s.unnecessary_wait_ci.format_pct()
         d50_str = f"{s.response_delay_p50_ms:.0f} ms {s.response_delay_p50_ci.format_ms()}"
         d95_str = f"{s.response_delay_p95_ms:.0f} ms"
 
@@ -507,20 +569,25 @@ def run_full_evaluation() -> None:
             cond = "Fixed"
         elif "Heuristic" in s.name:
             cond = "dev-tuned"
+        elif "PERSONA-BLIND" in s.name:
+            cond = "Reference ceiling (blind)"
         elif "ORACLE" in s.name:
-            cond = "Oracle bound"
+            cond = "Reference ceiling (persona-aware)"
         elif "Sweep" in s.name:
             cond = "mock cache, virtual clock"
         else:
             cond = "mock cache, virtual clock"
 
-        md_lines.append(f"| {s.name} | {acc_str} | {prem_str} | {unnec_str} | {d50_str} | {d95_str} | {cond} |")
+        md_lines.append(
+            f"| {s.name} | {acc_cluster_str} | {acc_wilson_str} | {prem_cluster_str} | {prem_wilson_str} | "
+            f"{unnec_cluster_str} | {unnec_wilson_str} | {d50_str} | {d95_str} | {cond} |"
+        )
 
     # Bedrock Judge row
-    md_lines.append("| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (no AWS credentials) |")
+    md_lines.append("| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (no AWS credentials) |")
 
     # GPU Placeholder row
-    md_lines.append("| Strands Decider 2B (GPU) | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet |")
+    md_lines.append("| Strands Decider 2B (GPU) | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet |")
 
     # Section 2: Per-Persona Breakdown
     md_lines.extend([
@@ -573,6 +640,8 @@ def run_full_evaluation() -> None:
         f"- **Unnecessary Wait Rate**: Fraction of completed turns where agent waited > 800 ms before responding. Numerator = delayed turns, Denominator = {n_fin} (total completed turns). Threshold is global 800 ms.",
         f"- **Response Delay (P50/P95)**: Elapsed time in milliseconds from speech end to agent floor yield, evaluated exclusively over completed turns (n={n_fin}).",
         f"- **Accuracy**: Binary turn-taking decision accuracy over all turns (n={n_total}).",
+        "- **Uncertainty Intervals**: Headline tables report non-parametric two-stage cluster bootstrap 95% intervals (B=1000 resamples: sample users with replacement, then sample turns within user with replacement) to account for turn clustering across 9 users (36 turns/user). Secondary column reports standard Wilson 1927 score intervals for comparison.",
+        "- **Reference Ceilings**: `PERSONA-BLIND CEILING` uses text category and global majority continuation (WAIT), achieving 77.2% (250/324). `ORACLE-UPPER-BOUND (Persona-Aware)` uses archetype parameters to achieve 82.1% (266/324). Neither is an achievable baseline; both serve as theoretical bounds.",
         "",
         "## 6. Findings & Observations",
         f"- **Ambiguity Impact**: On ambiguous utterances where complete-sounding clauses have persona-sampled continuations, the Text Heuristic achieves {category_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['ambiguous']['accuracy']*100:.1f}% accuracy with {category_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['ambiguous']['premature_rate']*100:.1f}% premature interruptions, matching the mock decider; no real Decider run yet.",

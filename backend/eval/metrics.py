@@ -79,6 +79,85 @@ def bootstrap_percentile_ci(
     return ConfidenceInterval(round(low, 2), round(high, 2))
 
 
+def cluster_bootstrap_ci(
+    records: list[dict[str, Any]],
+    metric_type: str,
+    cluster_key: str = "user_id",
+    n_resamples: int = 1000,
+    alpha: float = 0.05,
+    seed: int = 42,
+) -> ConfidenceInterval:
+    """Non-parametric two-stage cluster bootstrap interval.
+
+    Procedure (resample users with replacement, then turns within each sampled user):
+    1. Group records into K distinct user clusters C_1, ..., C_K.
+    2. For b in 1..B (B=1000 resamples):
+       a. Sample K user clusters with replacement: C*_1, ..., C*_K.
+       b. Within each resampled cluster C*_k, sample |C*_k| turns with replacement.
+       c. Compute metric theta*(b) on the pooled sample.
+    3. Return [percentile(theta*, 2.5), percentile(theta*, 97.5)].
+    """
+    if not records:
+        return ConfidenceInterval(0.0, 0.0)
+
+    clusters: dict[str, list[dict[str, Any]]] = {}
+    for r in records:
+        uid = r.get(cluster_key, "default")
+        clusters.setdefault(uid, []).append(r)
+
+    cluster_keys = list(clusters.keys())
+    k = len(cluster_keys)
+    if k <= 1:
+        if metric_type == "accuracy":
+            correct = sum(1 for r in records if r["predicted_action"] == r["ground_truth"])
+            return wilson_score_interval(correct, len(records))
+        elif metric_type == "premature":
+            prem = sum(1 for r in records if r["predicted_action"] == "RESPOND" and not r["is_turn_complete"])
+            return wilson_score_interval(prem, len(records))
+        elif metric_type == "unnecessary_wait":
+            completed = [r for r in records if r["is_turn_complete"]]
+            if not completed:
+                return ConfidenceInterval(0.0, 0.0)
+            delayed = sum(1 for r in completed if (r["action_timestamp_ms"] - r["turn_end_t"] > 800.0 or r["predicted_action"] == "WAIT"))
+            return wilson_score_interval(delayed, len(completed))
+
+    rng = random.Random(seed)
+    boot_stats: list[float] = []
+
+    for _ in range(n_resamples):
+        sampled: list[dict[str, Any]] = []
+        for _ in range(k):
+            chosen = rng.choice(cluster_keys)
+            user_recs = clusters[chosen]
+            n_recs = len(user_recs)
+            sampled.extend([rng.choice(user_recs) for _ in range(n_recs)])
+
+        n_tot = len(sampled)
+        if metric_type == "accuracy":
+            correct = sum(1 for r in sampled if r["predicted_action"] == r["ground_truth"])
+            stat = correct / n_tot if n_tot > 0 else 0.0
+        elif metric_type == "premature":
+            prem = sum(1 for r in sampled if r["predicted_action"] == "RESPOND" and not r["is_turn_complete"])
+            stat = prem / n_tot if n_tot > 0 else 0.0
+        elif metric_type == "unnecessary_wait":
+            completed = [r for r in sampled if r["is_turn_complete"]]
+            if not completed:
+                stat = 0.0
+            else:
+                delayed = sum(1 for r in completed if (r["action_timestamp_ms"] - r["turn_end_t"] > 800.0 or r["predicted_action"] == "WAIT"))
+                stat = delayed / len(completed)
+        else:
+            raise ValueError(f"Unknown metric_type: {metric_type}")
+
+        boot_stats.append(stat)
+
+    low_pct = (alpha / 2.0) * 100.0
+    high_pct = (1.0 - alpha / 2.0) * 100.0
+    low = float(np.percentile(boot_stats, low_pct))
+    high = float(np.percentile(boot_stats, high_pct))
+    return ConfidenceInterval(round(low, 4), round(high, 4))
+
+
 @dataclass
 class EvalSummary:
     """Summary of turn-taking performance metrics across an evaluation split."""
@@ -91,10 +170,13 @@ class EvalSummary:
     unnecessary_wait_count: int
     accuracy: float
     accuracy_ci: ConfidenceInterval
+    accuracy_cluster_ci: ConfidenceInterval
     premature_interruption_rate: float
     premature_interruption_ci: ConfidenceInterval
+    premature_interruption_cluster_ci: ConfidenceInterval
     unnecessary_wait_rate: float
     unnecessary_wait_ci: ConfidenceInterval
+    unnecessary_wait_cluster_ci: ConfidenceInterval
     response_delay_p50_ms: float
     response_delay_p50_ci: ConfidenceInterval
     response_delay_p95_ms: float
@@ -113,10 +195,13 @@ class EvalSummary:
             "unnecessary_wait_count": self.unnecessary_wait_count,
             "accuracy": round(self.accuracy, 4),
             "accuracy_ci": [self.accuracy_ci.low, self.accuracy_ci.high],
+            "accuracy_cluster_ci": [self.accuracy_cluster_ci.low, self.accuracy_cluster_ci.high],
             "premature_interruption_rate": round(self.premature_interruption_rate, 4),
             "premature_interruption_ci": [self.premature_interruption_ci.low, self.premature_interruption_ci.high],
+            "premature_interruption_cluster_ci": [self.premature_interruption_cluster_ci.low, self.premature_interruption_cluster_ci.high],
             "unnecessary_wait_rate": round(self.unnecessary_wait_rate, 4),
             "unnecessary_wait_ci": [self.unnecessary_wait_ci.low, self.unnecessary_wait_ci.high],
+            "unnecessary_wait_cluster_ci": [self.unnecessary_wait_cluster_ci.low, self.unnecessary_wait_cluster_ci.high],
             "response_delay_p50_ms": round(self.response_delay_p50_ms, 2),
             "response_delay_p50_ci": [self.response_delay_p50_ci.low, self.response_delay_p50_ci.high],
             "response_delay_p95_ms": round(self.response_delay_p95_ms, 2),
@@ -173,12 +258,15 @@ def compute_metrics(
 
     accuracy = correct_count / total
     acc_ci = wilson_score_interval(correct_count, total)
+    acc_cluster_ci = cluster_bootstrap_ci(eval_records, "accuracy")
 
     prem_rate = premature_count / total
     prem_ci = wilson_score_interval(premature_count, total)
+    prem_cluster_ci = cluster_bootstrap_ci(eval_records, "premature")
 
     unnec_rate = unnecessary_wait_count / finished_turns if finished_turns > 0 else 0.0
     unnec_ci = wilson_score_interval(unnecessary_wait_count, finished_turns) if finished_turns > 0 else ConfidenceInterval(0.0, 0.0)
+    unnec_cluster_ci = cluster_bootstrap_ci(eval_records, "unnecessary_wait") if finished_turns > 0 else ConfidenceInterval(0.0, 0.0)
 
     delay_p50 = float(np.median(response_delays)) if response_delays else 0.0
     delay_p50_ci = bootstrap_percentile_ci(response_delays, percentile=50.0) if response_delays else ConfidenceInterval(0.0, 0.0)
@@ -202,10 +290,13 @@ def compute_metrics(
         unnecessary_wait_count=unnecessary_wait_count,
         accuracy=accuracy,
         accuracy_ci=acc_ci,
+        accuracy_cluster_ci=acc_cluster_ci,
         premature_interruption_rate=prem_rate,
         premature_interruption_ci=prem_ci,
+        premature_interruption_cluster_ci=prem_cluster_ci,
         unnecessary_wait_rate=unnec_rate,
         unnecessary_wait_ci=unnec_ci,
+        unnecessary_wait_cluster_ci=unnec_cluster_ci,
         response_delay_p50_ms=delay_p50,
         response_delay_p50_ci=delay_p50_ci,
         response_delay_p95_ms=delay_p95,
