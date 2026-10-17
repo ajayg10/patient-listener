@@ -11,8 +11,8 @@
 | B4 | Reply agent | DONE | 2026-10-17 |
 | B5 | Baselines, dataset, eval harness | DONE | 2026-10-17 |
 | B5.5 | Audit & honesty check | DONE | 2026-10-17 |
-| B5.6 | Ambiguity, oracle bound & cache audit | DONE | 2026-10-17 |
 | B5.8 | Reconcile counts, cluster bootstrap & personalization effect | DONE | 2026-10-18 |
+| B5.9 | Independent units, learnable profile, ceilings & enumeration | DOING | 2026-10-18 |
 | B6 | Pace profile + regret log | TODO | |
 | B7 | Confidence-aware policy | TODO | |
 | B8 | Reusable pattern package | DONE | 2026-10-17 |
@@ -915,6 +915,29 @@
   - 2Q (turn_complete + mid_thought): 20 tok = 343.1/343.7 ms, 60 tok = 395.2/400.3 ms, 150 tok = 395.8/401.1 ms.
   - 2Q overhead: ~159-176 ms on GPU vs ~2500 ms on CPU.
   - Replayed test split at measured GPU median latency (235.6 ms): accuracy 75.6% [Cluster CI: 63.0%, 88.0%; Wilson: 70.7%, 80.0%], premature interruption rate 24.4%, response delay P50 = 486 ms, unnecessary wait = 0.0%. Replay row labeled `Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER]` in `results.md` (decision contents derived from mock cache).
+
+## Step B5.9 — PLAN
+- **Goal**: Reconcile exact lookup and state counts with strict report tests, implement full state enumeration for GPU precomputation, enforce generator sanity within binomial tolerance, expand the dataset to ~30 test users / ~15 dev users with learnable profile correlation, add the 3 reference ceilings with paired cluster bootstrap intervals, configure HF offline mode, and record the one-time Bedrock check.
+- **Approach**:
+  1. Housekeeping:
+     - Add `hf_offline: bool = False` to `config.py`, pass through to `decider_service.py` and `bench_decider.py`.
+     - Record Bedrock probe results:
+       * AWS credentials loaded via `~/.aws/credentials` in `us-east-1`.
+       * Bedrock control plane returned 123 foundation models and 98 inference profiles.
+       * One-time Converse test attempted with smallest available Claude model: `us.anthropic.claude-haiku-4-5-20251001-v1:0` returned `ValidationException: An error occurred (ValidationException) when calling the Converse operation: Operation not allowed` (model access not granted in account console; legacy `anthropic.claude-3-haiku-20240307-v1:0` returned `ResourceNotFoundException`).
+       * LLM Judge baseline is marked `SKIPPED` accordingly. Placeholders configured in `.env.example`. No credentials printed or logged.
+  2. Dataset expansion & generator sanity:
+     - 30 test users (10/archetype, ~12 turns each = 360 turns) and 15 dev users (5/archetype, ~12 turns each = 180 turns), strictly disjoint users and templates.
+     - Enforce per-user continuation rate matches $p_{\text{user}}$ within binomial tolerance.
+     - Confirm history session pause durations share the user's `jitter_ms` and correlate positively with $p_{\text{user}}$ ($r > 0.70$).
+  3. Ceilings & Paired Differences:
+     - Implement `PERSONA-BLIND`, `ARCHETYPE-AWARE`, and `USER-AWARE` reference ceilings.
+     - Compute paired turn-by-turn differences with two-stage cluster bootstrap intervals over users.
+  4. Full State Enumeration:
+     - Add `--enumerate` flag to `scripts/precompute_decisions.py` to list all possible base, profile, and post-speech-resumed states.
+     - Print total count and runtime estimate at 240 ms per 1Q call on Tesla T4.
+  5. Count reconciliation:
+     - Print final table on new data, explain lookups vs replay queries, add regression test.
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
