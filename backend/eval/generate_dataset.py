@@ -198,33 +198,39 @@ def generate_scenario_turn(
     user_info: dict[str, Any],
     persona_info: dict[str, Any],
     template: dict[str, Any],
-    turn_type: str,  # "complete" | "incomplete_trailing" | "ambiguous_finished" | "ambiguous_thinking"
+    turn_category: str,  # "complete" | "incomplete" | "ambiguous"
     turn_index: int,
     start_t: float = 0.0,
 ) -> dict[str, Any]:
     """Generate a single scenario with realistic timed audio events and ground-truth label."""
     user_id = user_info["id"]
     jitter = user_info.get("jitter_ms", 0)
+    archetype_key = user_info.get("archetype", "unknown")
 
-    # 1. Select utterance text based on type
-    if turn_type == "complete":
+    # 1. Select utterance text based on category
+    if turn_category == "complete":
         text = random.choice(template["complete_utterances"])
         is_turn_complete = True
         syntactically_complete = True
-    elif turn_type == "incomplete_trailing":
+    elif turn_category == "incomplete":
         text = random.choice(template["incomplete_utterances"])
         is_turn_complete = False
         syntactically_complete = False
-    elif turn_type == "ambiguous_finished":
-        text = random.choice(template["ambiguous_utterances"]) + "."
-        is_turn_complete = True
+    elif turn_category == "ambiguous":
+        # Ambiguous: syntactically complete text, but ground truth continuation is sampled
+        # per persona continuation probability (fast: 30%, slow: 50%, filler: 65%)
+        raw_text = random.choice(template["ambiguous_utterances"])
+        text = raw_text if raw_text.endswith((".", "?", "!")) else f"{raw_text}."
         syntactically_complete = True
-    else:  # ambiguous_thinking
-        text = random.choice(template["ambiguous_utterances"])
-        if random.random() < persona_info.get("filler_prob", 0.3):
-            text += " um..."
-        is_turn_complete = False
-        syntactically_complete = False
+
+        cont_prob = persona_info.get("continuation_prob", 0.40)
+        # If true, speaker is pausing mid-thought to continue speaking later
+        if random.random() < cont_prob:
+            is_turn_complete = False
+        else:
+            is_turn_complete = True
+    else:
+        raise ValueError(f"Unknown turn category: {turn_category}")
 
     # 2. Timing calculation
     words = text.split()
@@ -262,8 +268,10 @@ def generate_scenario_turn(
         "id": f"turn_{user_id}_{template['id']}_{turn_index:03d}",
         "user_id": user_id,
         "persona_id": persona_info["name"],
+        "archetype": archetype_key,
         "scenario_template_id": template["id"],
         "domain": template["domain"],
+        "category": turn_category,
         "text": text,
         "syntactically_complete": syntactically_complete,
         "is_turn_complete": is_turn_complete,
@@ -273,7 +281,7 @@ def generate_scenario_turn(
         "silence_ms": silence_ms,
         "turn_end_t": round(turn_end_t, 1),
         "events": events,
-        "generation_method": "template",  # Flagged per scenario (Bedrock when live, template fallback)
+        "generation_method": "template",
     }
 
 
@@ -316,31 +324,32 @@ def generate_dataset() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list
             "generation_method": "template",
         })
 
-    # 2. Generate Dev Turns (3 users x 4 dev templates x 6 turns = 72 turns)
+    # 2. Generate Dev Turns (12 users x 4 dev templates x 4 turns = 192 turns)
     dev_turns: list[dict[str, Any]] = []
     turn_idx = 0
-    turn_types = ["complete", "incomplete_trailing", "ambiguous_finished", "ambiguous_thinking"]
+    dev_categories = ["complete", "incomplete", "ambiguous", "ambiguous"]
 
     for u in dev_users:
         for tmpl in DEV_TEMPLATES:
-            for tt in turn_types:
+            for cat in dev_categories:
                 turn_idx += 1
-                turn = generate_scenario_turn(u, u["persona"], tmpl, tt, turn_idx)
+                turn = generate_scenario_turn(u, u["persona"], tmpl, cat, turn_idx)
                 dev_turns.append(turn)
 
-    # 3. Generate Test Turns (9 test users x 6 test templates x 6 turns = 324 turns >= 300 required!)
+    # 3. Generate Test Turns (9 test users x 6 test templates x 6 turns = 324 turns)
     test_turns: list[dict[str, Any]] = []
     turn_idx = 0
+    test_categories = ["complete", "complete", "incomplete", "incomplete", "ambiguous", "ambiguous"]
+
     for u in test_users:
         for tmpl in TEST_TEMPLATES:
-            # Generate 6 turns per user/template pair: 2 complete, 2 incomplete, 1 ambiguous finished, 1 ambiguous thinking
-            sub_types = ["complete", "complete", "incomplete_trailing", "incomplete_trailing", "ambiguous_finished", "ambiguous_thinking"]
-            for tt in sub_types:
+            for cat in test_categories:
                 turn_idx += 1
-                turn = generate_scenario_turn(u, u["persona"], tmpl, tt, turn_idx)
+                turn = generate_scenario_turn(u, u["persona"], tmpl, cat, turn_idx)
                 test_turns.append(turn)
 
     return dev_turns, test_turns, user_histories
+
 
 
 def save_datasets() -> None:

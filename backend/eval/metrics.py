@@ -85,6 +85,10 @@ class EvalSummary:
 
     name: str
     total_turns: int
+    finished_turns: int
+    incomplete_turns: int
+    premature_count: int
+    unnecessary_wait_count: int
     accuracy: float
     accuracy_ci: ConfidenceInterval
     premature_interruption_rate: float
@@ -103,6 +107,10 @@ class EvalSummary:
         return {
             "name": self.name,
             "total_turns": self.total_turns,
+            "finished_turns": self.finished_turns,
+            "incomplete_turns": self.incomplete_turns,
+            "premature_count": self.premature_count,
+            "unnecessary_wait_count": self.unnecessary_wait_count,
             "accuracy": round(self.accuracy, 4),
             "accuracy_ci": [self.accuracy_ci.low, self.accuracy_ci.high],
             "premature_interruption_rate": round(self.premature_interruption_rate, 4),
@@ -117,6 +125,7 @@ class EvalSummary:
             "decision_latency_p95_ms": round(self.decision_latency_p95_ms, 2),
             "inference_cost_usd": round(self.inference_cost_usd, 6),
         }
+
 
 
 def compute_metrics(
@@ -182,9 +191,15 @@ def compute_metrics(
 
     total_cost = total * inference_cost_per_turn
 
+    incomplete_turns = total - finished_turns
+
     return EvalSummary(
         name=approach_name,
         total_turns=total,
+        finished_turns=finished_turns,
+        incomplete_turns=incomplete_turns,
+        premature_count=premature_count,
+        unnecessary_wait_count=unnecessary_wait_count,
         accuracy=accuracy,
         accuracy_ci=acc_ci,
         premature_interruption_rate=prem_rate,
@@ -199,3 +214,4 @@ def compute_metrics(
         decision_latency_p95_ms=dec_p95,
         inference_cost_usd=total_cost,
     )
+

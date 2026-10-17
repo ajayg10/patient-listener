@@ -84,23 +84,42 @@ def collect_unique_states() -> list[dict[str, Any]]:
     unique_states: dict[str, dict[str, Any]] = {}
     sb = StateBuilder()
 
+    # 1. Precompute all 5 checkpoints for every turn text in dev and test
     for t in turns:
         sb.clear()
         sb.append_transcript(t["text"])
-        silence_ms = t["silence_ms"]
 
         for cp in checkpoints:
-            if silence_ms >= cp:
-                state_text = sb.build_state_text(silence_ms=cp)
-                key = compute_cache_key(model_id, "turn_complete", state_text)
-                if key not in unique_states:
-                    unique_states[key] = {
-                        "key": key,
-                        "model_id": model_id,
-                        "question_id": "turn_complete",
-                        "state_text": state_text,
-                        "checkpoint_ms": cp,
-                    }
+            state_text = sb.build_state_text(silence_ms=cp)
+            key = compute_cache_key(model_id, "turn_complete", state_text)
+            if key not in unique_states:
+                unique_states[key] = {
+                    "key": key,
+                    "model_id": model_id,
+                    "question_id": "turn_complete",
+                    "state_text": state_text,
+                    "checkpoint_ms": cp,
+                }
+
+    # 2. Also precompute B0 feasibility cases (each case has its own silence_ms)
+    b0_path = REPO_ROOT / "backend" / "eval" / "data" / "b0_cases.jsonl"
+    if b0_path.exists():
+        with open(b0_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    case = json.loads(line)
+                    sb.clear()
+                    sb.append_transcript(case["text"])
+                    state_text = sb.build_state_text(silence_ms=case["silence_ms"])
+                    key = compute_cache_key(model_id, "turn_complete", state_text)
+                    if key not in unique_states:
+                        unique_states[key] = {
+                            "key": key,
+                            "model_id": model_id,
+                            "question_id": "turn_complete",
+                            "state_text": state_text,
+                            "checkpoint_ms": case["silence_ms"],
+                        }
 
     return list(unique_states.values())
 

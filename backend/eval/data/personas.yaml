@@ -17,6 +17,7 @@ archetypes:
       min_ms: 550
       max_ms: 1000
     filler_prob: 0.10
+    continuation_prob: 0.30
     users:
       - id: "user_fast_01"
         split: "dev"
@@ -54,6 +55,7 @@ archetypes:
       min_ms: 1200
       max_ms: 2200
     filler_prob: 0.25
+    continuation_prob: 0.50
     users:
       - id: "user_slow_01"
         split: "dev"
@@ -91,6 +93,7 @@ archetypes:
       min_ms: 800
       max_ms: 1800
     filler_prob: 0.85
+    continuation_prob: 0.65
     users:
       - id: "user_filler_01"
         split: "dev"
