@@ -19,6 +19,7 @@ from backend.app.events import (
     TurnEvent,
     TurnYielded,
 )
+from backend.app.policy import PolicyThresholds, policy
 from backend.app.questions import TURN_COMPLETE_QUESTION
 from backend.app.state_builder import StateBuilder
 
@@ -35,11 +36,13 @@ class TurnManager:
         clock: Clock | None = None,
         state_builder: StateBuilder | None = None,
         cfg: TurnManagerConfig | None = None,
+        policy_thresholds: PolicyThresholds | None = None,
         question: ChoiceQuestion | None = None,
         on_event: Callable[[TurnEvent], None] | None = None,
     ) -> None:
         app_cfg: AppConfig = get_config()
         self.cfg = cfg or app_cfg.turn_manager
+        self.policy_thresholds = policy_thresholds or PolicyThresholds()
         self.decider = decider or MockDecider()
         self.clock = clock or SystemClock()
         self.state_builder = state_builder or StateBuilder()
@@ -237,9 +240,10 @@ class TurnManager:
             timestamp_ms=now,
         ))
 
-        # Placeholder Policy Hook (B3): RESPOND if model choice is RESPOND
-        # In B7, this will be replaced with calibrated confidence/regret gating.
-        if decision.choice == "RESPOND":
+        # Confidence-aware policy gate (B7)
+        silence_duration = (now - self.silence_start_time_ms) if self.silence_start_time_ms else float(checkpoint_ms)
+        action = policy(decision.probabilities, silence_duration, thresholds=self.policy_thresholds)
+        if action == "RESPOND":
             self._emit(TurnYielded(
                 action="RESPOND",
                 reason="decider_respond",
@@ -247,7 +251,7 @@ class TurnManager:
             ))
             self.state = "RESPONDING"
         else:
-            # Model says WAIT; continue in PAUSED state awaiting next checkpoint or speech
+            # Policy says WAIT; continue in PAUSED state awaiting next checkpoint or speech
             pass
 
     def reset(self) -> None:

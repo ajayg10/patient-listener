@@ -1047,6 +1047,35 @@
   - Resumable: Skips cached keys, flushes to `backend/eval/data/decisions_cache.jsonl`.
   - Documented in `scripts/gpu_run.md`.
 
+## Step B7 — PLAN
+- **Goal**: Implement confidence-aware policy with dual thresholds ($hi, lo$), Q1/Q2 conflict resolution, and hard max hold cap; calibrate on DEV only; compute probability reliability data and Brier scores; generate Pareto sweeps across hardware latency conditions; enforce strict cache provenance watermarking via `--cache` CLI argument.
+- **Approach**:
+  1. `backend/app/policy.py` & `patient_listener_pattern/decision.py`:
+     - Unify turn policy across repo: update `patient_listener_pattern/decision.py` with `hi, lo, max_hold_ms`, Q1/Q2 conflict rule, and re-export in `backend/app/policy.py`.
+     - Decision rules:
+       * Safety cap: $silence\_ms \ge max\_hold\_ms \implies \text{RESPOND}$ (always wins).
+       * Cadence floor: $silence\_ms < min\_silence\_for\_respond\_ms \implies \text{WAIT}$.
+       * Conflict rule: If Q1 says done ($p(\text{done}) \ge hi$) AND Q2 says mid_thought ($p(\text{mid\_thought}) \ge 0.50$), conflict triggers $\implies \text{WAIT}$ (keep listening).
+       * High confidence: $p(\text{done}) \ge hi \implies \text{RESPOND}$.
+       * Low confidence: $p(\text{done}) \le lo \implies \text{WAIT}$.
+       * Intermediate uncertainty ($lo < p < hi$): $\text{WAIT}$ and re-evaluate at next checkpoint with more evidence.
+  2. Calibration on DEV only:
+     - Grid search $(hi, lo)$ on DEV split turns only (180 dev turns across 15 users).
+     - Print search grid size and dev-selected $(hi^*, lo^*)$ optimal values.
+     - Report final evaluated performance strictly on TEST split turns.
+  3. Probability Reliability Data & Brier Score:
+     - Compute calibration bins, mean predicted probability, observed empirical rate, counts per bin (assert sum = $N$), and Brier score $\frac{1}{N}\sum (p_i - y_i)^2$ on dev and test.
+     - Export to JSON and render `reliability_curve.png`.
+  4. Pareto Frontier Sweep:
+     - Sweep premature interruption rate vs response delay (P50 and P95) for fixed timeouts (300-2000 ms), text heuristic threshold, and Decider policy $hi$ sweep.
+     - Evaluate across 3 latency conditions: 0 ms, measured GPU median (235.6 ms), measured CPU median (3190.1 ms).
+     - Export data JSON and plot `pareto_frontier.png` via matplotlib. Label curves with cache provenance.
+  5. Tests in `backend/tests/test_policy.py`:
+     - Test every policy branch, conflict resolution, safety cap priority, dev-only calibration guard, and reliability bin sum invariants.
+  6. CLI `--cache` Support:
+     - Add `--cache <path>` to `run_eval.py`. Inspect provenance: if real, generate headline reports and findings; if mock, watermark `[MOCK-DECIDER]` and suppress decider claims.
+
+
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
