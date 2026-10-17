@@ -72,8 +72,30 @@ def load_cache() -> dict[str, dict[str, Any]]:
     return cache
 
 
-def collect_unique_states() -> list[dict[str, Any]]:
-    """Extract every unique (state_text, question) needed across all checkpoints."""
+def derive_resumed_text(turn: dict[str, Any]) -> str | None:
+    """Derive full transcript after speech resumed for incomplete or continued turns."""
+    if turn.get("full_text"):
+        return str(turn["full_text"])
+    if turn.get("continuation_text"):
+        return f"{turn['text']} {turn['continuation_text']}"
+    if turn.get("resumed_text"):
+        return f"{turn['text']} {turn['resumed_text']}"
+
+    # If turn is incomplete, speaker paused mid-thought and resumes with a completed thought
+    if not turn.get("is_turn_complete", True):
+        raw = turn["text"].rstrip(". ")
+        if raw.endswith((", and", ", but", ", so", ", because")):
+            return f"{raw} could you please check on that for me?"
+        return f"{raw}... could you verify this for me?"
+
+    return None
+
+
+def collect_unique_states(include_speech_resumed: bool = True) -> list[dict[str, Any]]:
+    """Extract every unique (state_text, question) needed across all checkpoints,
+
+    including utterance prefixes, states after speech resumed, and B0 cases.
+    """
     cfg = get_config()
     model_id = cfg.decider_model_id
     checkpoints = sorted(cfg.turn_manager.checkpoints_ms)
@@ -84,12 +106,14 @@ def collect_unique_states() -> list[dict[str, Any]]:
             with open(path, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.strip():
-                        turns.append(json.loads(line))
+                        t_data = json.loads(line)
+                        t_data["_split"] = "dev" if "dev" in path.name else "test"
+                        turns.append(t_data)
 
     unique_states: dict[str, dict[str, Any]] = {}
     sb = StateBuilder()
 
-    # 1. Precompute all 5 checkpoints for every turn text in dev and test
+    # 1. Precompute all checkpoints for initial utterance prefixes
     for t in turns:
         sb.clear()
         sb.append_transcript(t["text"])
@@ -104,9 +128,31 @@ def collect_unique_states() -> list[dict[str, Any]]:
                     "question_id": "turn_complete",
                     "state_text": state_text,
                     "checkpoint_ms": cp,
+                    "kind": "prefix",
+                    "split": t["_split"],
                 }
 
-    # 2. Also precompute B0 feasibility cases (each case has its own silence_ms)
+        # 2. Precompute states after speech resumed
+        if include_speech_resumed:
+            resumed_text = derive_resumed_text(t)
+            if resumed_text and resumed_text != t["text"]:
+                sb.clear()
+                sb.append_transcript(resumed_text)
+                for cp in checkpoints:
+                    state_text = sb.build_state_text(silence_ms=cp)
+                    key = compute_cache_key(model_id, "turn_complete", state_text)
+                    if key not in unique_states:
+                        unique_states[key] = {
+                            "key": key,
+                            "model_id": model_id,
+                            "question_id": "turn_complete",
+                            "state_text": state_text,
+                            "checkpoint_ms": cp,
+                            "kind": "speech_resumed",
+                            "split": t["_split"],
+                        }
+
+    # 3. Also precompute B0 feasibility cases (each case has its own silence_ms)
     b0_path = REPO_ROOT / "backend" / "eval" / "data" / "b0_cases.jsonl"
     if b0_path.exists():
         with open(b0_path, "r", encoding="utf-8") as f:
@@ -124,16 +170,59 @@ def collect_unique_states() -> list[dict[str, Any]]:
                             "question_id": "turn_complete",
                             "state_text": state_text,
                             "checkpoint_ms": case["silence_ms"],
+                            "kind": "b0_case",
+                            "split": "b0",
                         }
 
     return list(unique_states.values())
+
+
+def enumerate_states_report() -> None:
+    """List every state the engine could query and print runtime estimates."""
+    MEASURED_T4_1Q_MEDIAN_S = 0.2356  # 235.6 ms measured on Tesla T4 GPU in Colab
+
+    unique_items = collect_unique_states(include_speech_resumed=True)
+    cache = load_cache()
+
+    n_total = len(unique_items)
+    uncached = [item for item in unique_items if item["key"] not in cache]
+    n_uncached = len(uncached)
+    n_cached = n_total - n_uncached
+
+    n_prefix = sum(1 for item in unique_items if item.get("kind") == "prefix")
+    n_resumed = sum(1 for item in unique_items if item.get("kind") == "speech_resumed")
+    n_b0 = sum(1 for item in unique_items if item.get("kind") == "b0_case")
+    dev_states = sum(1 for item in unique_items if item.get("split") == "dev")
+    test_states = sum(1 for item in unique_items if item.get("split") == "test")
+
+    est_sec_uncached = n_uncached * MEASURED_T4_1Q_MEDIAN_S
+    est_sec_total = n_total * MEASURED_T4_1Q_MEDIAN_S
+
+    print("=" * 70)
+    print("FULL STATE ENUMERATION REPORT (Real Decider Precompute Coverage)")
+    print("=" * 70)
+    print(f"Total Unique States:               {n_total}")
+    print(f"  - Initial Utterance Prefixes:    {n_prefix} states (checkpoints [250, 500, 800, 1200, 1800] ms)")
+    print(f"  - Post Speech-Resumed States:    {n_resumed} states (after speaker resumes and completes)")
+    print(f"  - B0 Feasibility Cases:          {n_b0} states")
+    print(f"  - Dev Split States:              {dev_states}")
+    print(f"  - Test Split States:             {test_states}")
+    print("-" * 70)
+    print("Cache Status:")
+    print(f"  - Already Cached:                {n_cached} states")
+    print(f"  - Uncached Keys Remaining:       {n_uncached} states")
+    print("-" * 70)
+    print("Estimated Runtime (Tesla T4 GPU, real Decider 1Q median = 235.6 ms):")
+    print(f"  - For Uncached Keys ({n_uncached}):    {est_sec_uncached:.1f} s ({est_sec_uncached / 60.0:.2f} min)")
+    print(f"  - For All States ({n_total}):       {est_sec_total:.1f} s ({est_sec_total / 60.0:.2f} min)")
+    print("=" * 70)
 
 
 def run_precompute(force_backend: str | None = None) -> None:
     cfg = get_config()
     backend = force_backend or cfg.decider_backend.lower()
 
-    unique_items = collect_unique_states()
+    unique_items = collect_unique_states(include_speech_resumed=True)
     cache = load_cache()
 
     uncached = [item for item in unique_items if item["key"] not in cache]
@@ -219,5 +308,13 @@ def run_precompute(force_backend: str | None = None) -> None:
 
 
 if __name__ == "__main__":
-    force_b = sys.argv[1] if len(sys.argv) > 1 else None
-    run_precompute(force_backend=force_b)
+    if "--enumerate" in sys.argv:
+        enumerate_states_report()
+    else:
+        force_b = None
+        for arg in sys.argv[1:]:
+            if not arg.startswith("--"):
+                force_b = arg
+                break
+        run_precompute(force_backend=force_b)
+
