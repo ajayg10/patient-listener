@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +47,12 @@ class EnvSettings(BaseSettings):
     aws_region: str = "us-east-1"
     mock_bedrock: bool = True
 
-    hf_home: str = "E:\\hf-cache"
+    hf_home: str = Field(
+        default_factory=lambda: os.environ.get(
+            "HF_HOME",
+            "E:\\hf-cache" if os.name == "nt" and Path("E:/hf-cache").exists() else str(Path.home() / ".cache" / "huggingface")
+        )
+    )
     config_path: str = "config.yaml"
 
     model_config = SettingsConfigDict(

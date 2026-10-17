@@ -19,12 +19,17 @@ import psutil
 # Ensure repo root is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Enforce cache directories before importing torch / strands_decider
-os.environ["HF_HOME"] = "E:\\hf-cache"
-os.environ["HF_HUB_DISABLE_XET"] = "1"
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TEMP"] = "E:\\tmp"
-os.environ["TMP"] = "E:\\tmp"
+# Read HF_HOME from environment or config, never hardcoding a drive letter
+if "HF_HOME" not in os.environ:
+    from backend.app.config import get_config
+    _cfg_hf = get_config().hf_home
+    if _cfg_hf:
+        os.environ["HF_HOME"] = _cfg_hf
+
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+if os.name == "nt" and Path("E:/tmp").exists():
+    os.environ.setdefault("TEMP", "E:\\tmp")
+    os.environ.setdefault("TMP", "E:\\tmp")
 
 from backend.app.config import get_config
 from backend.app.questions import MID_THOUGHT_QUESTION, TURN_COMPLETE_QUESTION
@@ -129,18 +134,26 @@ def benchmark() -> None:
         })
         print(f"Tokens ~{sz}: 1Q med={med_1q:.1f}ms | 2Q med={med_2q:.1f}ms (overhead: {overhead_ms:+.1f}ms)")
 
+    device_str = cfg.decider_device
+    device_detail = device_str.upper()
+    if device_str.startswith("cuda") and torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        device_detail = f"CUDA (GPU: {gpu_name})"
+    elif device_str == "cpu":
+        device_detail = "CPU"
+
+    model_dtype = "unknown"
+    if hasattr(engine, "model") and hasattr(engine.model, "dtype"):
+        model_dtype = str(engine.model.dtype).replace("torch.", "")
+    elif hasattr(engine, "dtype"):
+        model_dtype = str(engine.dtype).replace("torch.", "")
+
     # Print Formatted Markdown Table
-    print("\n### Benchmark Results Table (Measured on CPU)")
+    print(f"\n### Benchmark Results Table (Measured on {device_detail}, dtype: {model_dtype})")
     print("| State Tokens | 1 Question Median (ms) | 1 Question P95 (ms) | 2 Questions Median (ms) | 2 Questions P95 (ms) | 2Q Overhead (ms) |")
     print("|---|---|---|---|---|---|")
     for r in results:
         print(f"| {r['size']} tokens | {r['med_1q']} | {r['p95_1q']} | {r['med_2q']} | {r['p95_2q']} | {r['overhead_ms']} |")
-
-    print("\n### Empty Table Template for GPU Results (e.g. Colab / Kaggle)")
-    print("| State Tokens | 1 Question Median (ms) | 1 Question P95 (ms) | 2 Questions Median (ms) | 2 Questions P95 (ms) | 2Q Overhead (ms) |")
-    print("|---|---|---|---|---|---|")
-    for sz in sizes:
-        print(f"| {sz} tokens | — | — | — | — | — |")
 
 
 if __name__ == "__main__":

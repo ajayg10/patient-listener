@@ -25,12 +25,17 @@ import psutil
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-# Enforce cache directories before importing torch / strands_decider
-os.environ["HF_HOME"] = os.environ.get("HF_HOME", "E:\\hf-cache")
-os.environ["HF_HUB_DISABLE_XET"] = "1"
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TEMP"] = os.environ.get("TEMP", "E:\\tmp")
-os.environ["TMP"] = os.environ.get("TMP", "E:\\tmp")
+# Read HF_HOME from environment or config, never hardcoding a drive letter
+if "HF_HOME" not in os.environ:
+    from backend.app.config import get_config
+    _cfg_hf = get_config().hf_home
+    if _cfg_hf:
+        os.environ["HF_HOME"] = _cfg_hf
+
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+if os.name == "nt" and Path("E:/tmp").exists():
+    os.environ.setdefault("TEMP", "E:\\tmp")
+    os.environ.setdefault("TMP", "E:\\tmp")
 
 from backend.app.config import get_config
 from backend.app.decider_service import (
