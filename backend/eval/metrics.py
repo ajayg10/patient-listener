@@ -158,6 +158,56 @@ def cluster_bootstrap_ci(
     return ConfidenceInterval(round(low, 4), round(high, 4))
 
 
+def cluster_bootstrap_paired_difference_ci(
+    records_a: list[dict[str, Any]],
+    records_b: list[dict[str, Any]],
+    cluster_key: str = "user_id",
+    n_resamples: int = 1000,
+    alpha: float = 0.05,
+    seed: int = 42,
+) -> tuple[float, ConfidenceInterval]:
+    """Non-parametric two-stage cluster bootstrap interval for paired difference in accuracy (B - A)."""
+    map_a = {r["id"]: (1.0 if r["predicted_action"] == r["ground_truth"] else 0.0) for r in records_a}
+    map_b = {r["id"]: (1.0 if r["predicted_action"] == r["ground_truth"] else 0.0) for r in records_b}
+
+    paired_by_user: dict[str, list[tuple[float, float]]] = {}
+    for r in records_a:
+        tid = r["id"]
+        uid = r.get(cluster_key, "default")
+        val_a = map_a[tid]
+        val_b = map_b.get(tid, 0.0)
+        paired_by_user.setdefault(uid, []).append((val_a, val_b))
+
+    all_pairs = [pair for pairs in paired_by_user.values() for pair in pairs]
+    observed_diff = (sum(p[1] for p in all_pairs) - sum(p[0] for p in all_pairs)) / len(all_pairs) if all_pairs else 0.0
+
+    cluster_keys = list(paired_by_user.keys())
+    k = len(cluster_keys)
+    if k <= 1:
+        return round(observed_diff, 4), ConfidenceInterval(round(observed_diff, 4), round(observed_diff, 4))
+
+    rng = random.Random(seed)
+    boot_diffs: list[float] = []
+
+    for _ in range(n_resamples):
+        sampled_pairs: list[tuple[float, float]] = []
+        for _ in range(k):
+            chosen = rng.choice(cluster_keys)
+            user_pairs = paired_by_user[chosen]
+            n_p = len(user_pairs)
+            sampled_pairs.extend([rng.choice(user_pairs) for _ in range(n_p)])
+
+        n_tot = len(sampled_pairs)
+        diff = (sum(p[1] for p in sampled_pairs) - sum(p[0] for p in sampled_pairs)) / n_tot if n_tot > 0 else 0.0
+        boot_diffs.append(diff)
+
+    low_pct = (alpha / 2.0) * 100.0
+    high_pct = (1.0 - alpha / 2.0) * 100.0
+    low = float(np.percentile(boot_diffs, low_pct))
+    high = float(np.percentile(boot_diffs, high_pct))
+    return round(observed_diff, 4), ConfidenceInterval(round(low, 4), round(high, 4))
+
+
 @dataclass
 class EvalSummary:
     """Summary of turn-taking performance metrics across an evaluation split."""

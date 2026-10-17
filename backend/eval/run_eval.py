@@ -24,17 +24,24 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from backend.app.config import get_config
 from backend.eval.baselines import FixedTimeoutBaseline, LLMJudgeBaseline, TextHeuristicBaseline
-from backend.eval.metrics import EvalSummary, compute_metrics
+from backend.eval.metrics import (
+    EvalSummary,
+    cluster_bootstrap_paired_difference_ci,
+    compute_metrics,
+)
 from scripts.precompute_decisions import compute_cache_key, load_cache
 
 DATA_DIR = REPO_ROOT / "backend" / "eval" / "data"
 RESULTS_DIR = REPO_ROOT / "backend" / "eval" / "results"
 TEST_DATA_PATH = DATA_DIR / "test_turns.jsonl"
+PERSONAS_PATH = DATA_DIR / "personas.yaml"
 B0_CASES_PATH = DATA_DIR / "b0_cases.jsonl"
 B0_RESULTS_PATH = RESULTS_DIR / "b0_results.json"
 
@@ -206,6 +213,74 @@ def evaluate_oracle_upper_bound(turns: list[dict[str, Any]]) -> list[dict[str, A
             "persona_id": t.get("persona_id"),
             "archetype": t.get("archetype"),
             "category": t.get("category"),
+            "ground_truth": t["ground_truth"],
+            "predicted_action": pred_action,
+            "turn_end_t": turn_end_t,
+            "action_timestamp_ms": action_t,
+            "is_turn_complete": is_complete,
+            "decision_latency_ms": 0.0,
+        })
+    return records
+
+
+def evaluate_archetype_aware_ceiling(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Archetype-aware reference ceiling (Bayes oracle using persona archetype probabilities)."""
+    return evaluate_oracle_upper_bound(turns)
+
+
+def evaluate_user_aware_ceiling(turns: list[dict[str, Any]], personas: dict[str, Any]) -> list[dict[str, Any]]:
+    """User-aware reference ceiling predictor.
+
+    Uses individual user continuation probability (p_user = clamp(p_base + jitter/200, 0.05, 0.95)):
+    - complete: P(complete) = 1.0 -> RESPOND at 250ms.
+    - incomplete: P(complete) = 0.0 -> WAIT (until speech resumes).
+    - ambiguous:
+        * If P(complete) = (1 - p_user) >= 0.65 -> RESPOND at 250ms.
+        * If P(complete) = (1 - p_user) < 0.65 -> WAIT (until max wait 2200ms if complete, or speech resumes).
+    """
+    user_p_map: dict[str, float] = {}
+    for _arch_name, arch in personas.items():
+        base_p = arch.get("continuation_prob", 0.40)
+        for u in arch.get("users", []):
+            p_u = max(0.05, min(0.95, base_p + u.get("jitter_ms", 0) / 200.0))
+            user_p_map[u["id"]] = p_u
+
+    records = []
+    for t in turns:
+        speech_end_t = t["speech_end_t"]
+        turn_end_t = t["turn_end_t"]
+        silence_ms = t["silence_ms"]
+        is_complete = t["is_turn_complete"]
+        category = t.get("category")
+        user_id = t.get("user_id", "")
+
+        if category == "complete":
+            pred_action = "RESPOND"
+            action_t = speech_end_t + 250.0
+        elif category == "incomplete":
+            pred_action = "WAIT"
+            action_t = speech_end_t + silence_ms
+        elif category == "ambiguous":
+            p_user = user_p_map.get(user_id, 0.40)
+            if (1.0 - p_user) >= 0.65:
+                pred_action = "RESPOND"
+                action_t = speech_end_t + 250.0
+            else:
+                pred_action = "WAIT"
+                if is_complete:
+                    action_t = speech_end_t + 2200.0
+                else:
+                    action_t = speech_end_t + silence_ms
+        else:
+            pred_action = "RESPOND" if is_complete else "WAIT"
+            action_t = speech_end_t + 250.0 if is_complete else speech_end_t + silence_ms
+
+        records.append({
+            "id": t["id"],
+            "user_id": user_id,
+            "persona_id": t.get("persona_id"),
+            "archetype": t.get("archetype"),
+            "category": category,
             "ground_truth": t["ground_truth"],
             "predicted_action": pred_action,
             "turn_end_t": turn_end_t,
@@ -500,8 +575,29 @@ def run_full_evaluation() -> None:
         )
 
     # 3. Reference Ceilings
+    personas_dict = {}
+    if PERSONAS_PATH.exists():
+        with open(PERSONAS_PATH, "r", encoding="utf-8") as f:
+            personas_dict = yaml.safe_load(f).get("archetypes", {})
+
     all_runs["PERSONA-BLIND CEILING"] = evaluate_persona_blind_ceiling(turns)
+    all_runs["ARCHETYPE-AWARE CEILING"] = evaluate_archetype_aware_ceiling(turns)
+    all_runs["USER-AWARE CEILING"] = evaluate_user_aware_ceiling(turns, personas_dict)
     all_runs["ORACLE-UPPER-BOUND (Persona-Aware)"] = evaluate_oracle_upper_bound(turns)
+
+    # Paired differences between reference ceilings (Cluster Bootstrap over users)
+    diff_arch_blind, ci_arch_blind = cluster_bootstrap_paired_difference_ci(
+        all_runs["PERSONA-BLIND CEILING"],
+        all_runs["ARCHETYPE-AWARE CEILING"],
+    )
+    diff_user_arch, ci_user_arch = cluster_bootstrap_paired_difference_ci(
+        all_runs["ARCHETYPE-AWARE CEILING"],
+        all_runs["USER-AWARE CEILING"],
+    )
+    diff_user_blind, ci_user_blind = cluster_bootstrap_paired_difference_ci(
+        all_runs["PERSONA-BLIND CEILING"],
+        all_runs["USER-AWARE CEILING"],
+    )
 
     # Compute summaries for main comparison table
     summaries: list[EvalSummary] = []
@@ -522,6 +618,8 @@ def run_full_evaluation() -> None:
         f"Strands Decider 2B ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4) [MOCK-DECIDER]",
         f"Strands Decider 2B ({MEASURED_CPU_MEDIAN_MS:.0f}ms CPU) [MOCK-DECIDER]",
         "PERSONA-BLIND CEILING",
+        "ARCHETYPE-AWARE CEILING",
+        "USER-AWARE CEILING",
         "ORACLE-UPPER-BOUND (Persona-Aware)",
     ]
 
@@ -625,6 +723,23 @@ def run_full_evaluation() -> None:
                 "150_tokens_ms": {"median": 395.8, "p95": 401.1},
             },
         },
+        "reference_ceilings_paired_differences": {
+            "archetype_vs_blind": {
+                "observed_diff": diff_arch_blind,
+                "ci_low": ci_arch_blind.low,
+                "ci_high": ci_arch_blind.high,
+            },
+            "user_vs_archetype": {
+                "observed_diff": diff_user_arch,
+                "ci_low": ci_user_arch.low,
+                "ci_high": ci_user_arch.high,
+            },
+            "user_vs_blind": {
+                "observed_diff": diff_user_blind,
+                "ci_low": ci_user_blind.low,
+                "ci_high": ci_user_blind.high,
+            },
+        },
         "b0_validation_subset": b0_results,
     }
 
@@ -685,6 +800,10 @@ def run_full_evaluation() -> None:
             cond = "dev-tuned"
         elif "PERSONA-BLIND" in s.name:
             cond = "Reference ceiling (blind)"
+        elif "ARCHETYPE-AWARE" in s.name:
+            cond = "Reference ceiling (archetype-aware)"
+        elif "USER-AWARE" in s.name:
+            cond = "Reference ceiling (user-aware)"
         elif "ORACLE" in s.name:
             cond = "Reference ceiling (persona-aware)"
         elif "Sweep" in s.name:
@@ -699,6 +818,18 @@ def run_full_evaluation() -> None:
 
     # Bedrock Judge row
     md_lines.append("| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (no AWS credentials) |")
+
+    # Reference Ceilings Paired Differences Table
+    md_lines.extend([
+        "",
+        "### Reference Ceilings Paired Differences (Cluster Bootstrap 95% CI over Users)",
+        "",
+        "| Comparison | Reference Ceiling A | Reference Ceiling B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |",
+        "|---|---|---|---|---|",
+        f"| Archetype vs Blind | PERSONA-BLIND CEILING | ARCHETYPE-AWARE CEILING | {diff_arch_blind * 100:+.1f}% | [{ci_arch_blind.low * 100:+.1f}%, {ci_arch_blind.high * 100:+.1f}%] |",
+        f"| User vs Archetype | ARCHETYPE-AWARE CEILING | USER-AWARE CEILING | {diff_user_arch * 100:+.1f}% | [{ci_user_arch.low * 100:+.1f}%, {ci_user_arch.high * 100:+.1f}%] |",
+        f"| User vs Blind | PERSONA-BLIND CEILING | USER-AWARE CEILING | {diff_user_blind * 100:+.1f}% | [{ci_user_blind.low * 100:+.1f}%, {ci_user_blind.high * 100:+.1f}%] |",
+    ])
 
     # Section 2: Per-Persona Breakdown
     md_lines.extend([
@@ -763,8 +894,8 @@ def run_full_evaluation() -> None:
         f"- **Unnecessary Wait Rate**: Fraction of completed turns where agent waited > 800 ms before responding. Numerator = delayed turns, Denominator = {n_fin} (total completed turns). Threshold is global 800 ms.",
         f"- **Response Delay (P50/P95)**: Elapsed time in milliseconds from speech end to agent floor yield, evaluated exclusively over completed turns (n={n_fin}).",
         f"- **Accuracy**: Binary turn-taking decision accuracy over all turns (n={n_total}).",
-        "- **Uncertainty Intervals**: Headline tables report non-parametric two-stage cluster bootstrap 95% intervals (B=1000 resamples: sample users with replacement, then sample turns within user with replacement) to account for turn clustering across 9 users (36 turns/user). Secondary column reports standard Wilson 1927 score intervals for comparison.",
-        "- **Reference Ceilings**: `PERSONA-BLIND CEILING` uses text category and global majority continuation (WAIT), achieving 77.2% (250/324). `ORACLE-UPPER-BOUND (Persona-Aware)` uses archetype parameters to achieve 82.1% (266/324). Neither is an achievable baseline; both serve as theoretical bounds.",
+        f"- **Uncertainty Intervals**: Headline tables report non-parametric two-stage cluster bootstrap 95% intervals (B=1000 resamples: sample users with replacement, then sample turns within user with replacement) to account for turn clustering across {n_users} users ({t_per_u} turns/user). Secondary column reports standard Wilson 1927 score intervals for comparison.",
+        "- **Reference Ceilings**: `PERSONA-BLIND CEILING` (blind), `ARCHETYPE-AWARE CEILING` (archetype parameters), and `USER-AWARE CEILING` (individual user continuation probability p_user) represent theoretical policy bounds under varying degrees of user knowledge. None are achievable baselines; all serve as reference ceilings.",
         "",
         "## 6. Findings & Observations",
         f"- **Ambiguity Impact**: On ambiguous utterances where complete-sounding clauses have persona-sampled continuations, the Text Heuristic achieves {category_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['ambiguous']['accuracy']*100:.1f}% accuracy with {category_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['ambiguous']['premature_rate']*100:.1f}% premature interruptions, matching the mock decider; no real Decider run yet.",

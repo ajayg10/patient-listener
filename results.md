@@ -34,8 +34,18 @@
 | Decider Sweep (1000ms Sweep) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 1250 ms [1250.0, 1250.0] ms | 1250 ms | mock cache, virtual clock |
 | Decider Sweep (3000ms Sweep) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | mock cache, virtual clock |
 | PERSONA-BLIND CEILING | 74.7% [68.6%, 80.3%] | [70.0%, 78.9%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 50.3% [41.9%, 59.2%] | [43.1%, 57.5%] | 2200 ms [250.0, 2200.0] ms | 2200 ms | Reference ceiling (blind) |
+| ARCHETYPE-AWARE CEILING | 81.4% [76.4%, 86.4%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [16.6%, 38.4%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (archetype-aware) |
+| USER-AWARE CEILING | 81.9% [77.2%, 86.7%] | [77.6%, 85.6%] | 3.9% [1.1%, 7.2%] | [2.3%, 6.4%] | 28.2% [17.5%, 39.9%] | [22.1%, 35.1%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (user-aware) |
 | ORACLE-UPPER-BOUND (Persona-Aware) | 81.4% [76.4%, 86.4%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [16.6%, 38.4%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (persona-aware) |
 | Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (no AWS credentials) |
+
+### Reference Ceilings Paired Differences (Cluster Bootstrap 95% CI over Users)
+
+| Comparison | Reference Ceiling A | Reference Ceiling B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |
+|---|---|---|---|---|
+| Archetype vs Blind | PERSONA-BLIND CEILING | ARCHETYPE-AWARE CEILING | +6.7% | [+1.4%, +13.1%] |
+| User vs Archetype | ARCHETYPE-AWARE CEILING | USER-AWARE CEILING | +0.6% | [-2.8%, +3.9%] |
+| User vs Blind | PERSONA-BLIND CEILING | USER-AWARE CEILING | +7.2% | [+2.2%, +13.6%] |
 
 ## 2. Per-Persona Performance Breakdown
 
@@ -49,6 +59,8 @@
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 486 ms | 25.8% | 486 ms | 33.3% | 486 ms |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
 | PERSONA-BLIND CEILING | 0.0% | 2200 ms | 0.0% | 250 ms | 0.0% | 250 ms |
+| ARCHETYPE-AWARE CEILING | 15.0% | 250 ms | 0.0% | 250 ms | 0.0% | 250 ms |
+| USER-AWARE CEILING | 8.3% | 250 ms | 3.3% | 250 ms | 0.0% | 250 ms |
 | ORACLE-UPPER-BOUND (Persona-Aware) | 15.0% | 250 ms | 0.0% | 250 ms | 0.0% | 250 ms |
 
 ## 3. Per-Category Performance Breakdown
@@ -63,6 +75,8 @@
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 486 ms | 0.0% | 60.6% | 39.4% |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
 | PERSONA-BLIND CEILING | 100.0% | 250 ms | 0.0% | 49.4% | 0.0% |
+| ARCHETYPE-AWARE CEILING | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
+| USER-AWARE CEILING | 100.0% | 250 ms | 0.0% | 63.9% | 7.8% |
 | ORACLE-UPPER-BOUND (Persona-Aware) | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
 
 ## 4. Decider Hardware Latency Benchmarks & B0 Validation Set
@@ -88,8 +102,8 @@
 - **Unnecessary Wait Rate**: Fraction of completed turns where agent waited > 800 ms before responding. Numerator = delayed turns, Denominator = 181 (total completed turns). Threshold is global 800 ms.
 - **Response Delay (P50/P95)**: Elapsed time in milliseconds from speech end to agent floor yield, evaluated exclusively over completed turns (n=181).
 - **Accuracy**: Binary turn-taking decision accuracy over all turns (n=360).
-- **Uncertainty Intervals**: Headline tables report non-parametric two-stage cluster bootstrap 95% intervals (B=1000 resamples: sample users with replacement, then sample turns within user with replacement) to account for turn clustering across 9 users (36 turns/user). Secondary column reports standard Wilson 1927 score intervals for comparison.
-- **Reference Ceilings**: `PERSONA-BLIND CEILING` uses text category and global majority continuation (WAIT), achieving 77.2% (250/324). `ORACLE-UPPER-BOUND (Persona-Aware)` uses archetype parameters to achieve 82.1% (266/324). Neither is an achievable baseline; both serve as theoretical bounds.
+- **Uncertainty Intervals**: Headline tables report non-parametric two-stage cluster bootstrap 95% intervals (B=1000 resamples: sample users with replacement, then sample turns within user with replacement) to account for turn clustering across 30 users (12 turns/user). Secondary column reports standard Wilson 1927 score intervals for comparison.
+- **Reference Ceilings**: `PERSONA-BLIND CEILING` (blind), `ARCHETYPE-AWARE CEILING` (archetype parameters), and `USER-AWARE CEILING` (individual user continuation probability p_user) represent theoretical policy bounds under varying degrees of user knowledge. None are achievable baselines; all serve as reference ceilings.
 
 ## 6. Findings & Observations
 - **Ambiguity Impact**: On ambiguous utterances where complete-sounding clauses have persona-sampled continuations, the Text Heuristic achieves 50.6% accuracy with 49.4% premature interruptions, matching the mock decider; no real Decider run yet.

@@ -939,6 +939,52 @@
   5. Count reconciliation:
      - Print final table on new data, explain lookups vs replay queries, add regression test.
 
+## Step B5.9 — DONE
+- **Count Reconciliation**:
+  - Reconciled exact dataset table across current splits (540 turns total: 180 dev / 360 test across 45 users):
+    | Split | Turns | Users | Unique Utterances | Lookups | Unique States Reached | Cache Hits | Misses |
+    |---|---|---|---|---|---|---|---|
+    | DEV | 180 | 15 | 24 | 644 | 102 | 644 | 0 |
+    | TEST | 360 | 30 | 36 | 1282 | 154 | 1282 | 0 |
+    | TOTAL | 540 | 45 | 60 | 1926 | 256 | 1926 | 0 |
+  - Lookups & state differences explained:
+    * Lookups (1,831 -> 1,926): Test set expanded to 360 turns across 30 users, resulting in 1,282 test lookups + 644 dev lookups.
+    * 2,904 vs 1,926 lookups: 1,926 is the single-pass lookup count; 2,904 is the cumulative query count across all latency sweep evaluations in `run_eval.py`.
+    * Unique states reached: 256 (102 dev + 154 test) reached under the mock decision trajectory.
+  - Added strict test `test_reconciled_counts_in_results_md` in `backend/tests/test_eval.py` asserting exact match with `results.md`.
+
+- **Generator Sanity Verified**:
+  - Configured vs realized continuation rates:
+    * `fast_pauser`: Configured $p=0.30$, Realized = 18/60 (0.300), $z = 0.00$.
+    * `slow_pauser`: Configured $p=0.50$, Realized = 31/60 (0.517), $z = 0.26$.
+    * `filler_heavy`: Configured $p=0.65$, Realized = 40/60 (0.667), $z = 0.27$.
+    * All 30 individual test users have $|k_{\text{user}} - 6 \cdot p_{\text{user}}| \le 0.5$ turns.
+  - Added test suite in `backend/tests/test_generator_sanity.py` testing per-archetype and per-user binomial tolerances and zero split leakage.
+
+- **Profile Learnability**:
+  - History session pause distributions share each user's `jitter_ms`.
+  - Pearson correlation between user's history median pause and $p_{\text{user}}$ across 30 test users is $r = +0.4358$ ($p < 0.02$), confirming learnable statistical signal.
+
+- **Three Reference Ceilings & Paired Differences**:
+  - Evaluated on 360 test turns across 30 users:
+    * `PERSONA-BLIND CEILING`: 74.7% [Cluster 95% CI: 68.6%, 80.3%; Wilson: 70.0%, 78.9%]
+    * `ARCHETYPE-AWARE CEILING`: 81.4% [Cluster 95% CI: 76.4%, 86.4%; Wilson: 77.0%, 85.1%]
+    * `USER-AWARE CEILING`: 81.9% [Cluster 95% CI: 77.2%, 86.7%; Wilson: 77.6%, 85.6%]
+  - Paired Differences (Two-Stage Cluster Bootstrap 95% CI over Users):
+    * Archetype vs Blind: $+6.7\%$ [Cluster 95% CI: $+1.4\%$, $+13.1\%$]
+    * User vs Archetype: $+0.6\%$ [Cluster 95% CI: $-2.8\%$, $+3.9\%$]
+    * User vs Blind: $+7.2\%$ [Cluster 95% CI: $+2.2\%$, $+13.6\%$]
+  - All three explicitly designated as theoretical reference ceilings in `results.md` and code, not baselines.
+
+- **Full State Enumeration**:
+  - Implemented `scripts/precompute_decisions.py --enumerate`: enumerates all 540 possible states reachable by the engine (every utterance prefix at each checkpoint plus states after speech resumed).
+  - Runtime estimate on Tesla T4: 540 states $\times$ 235.6 ms = 127.2 seconds (~2.1 minutes).
+
+- **Housekeeping**:
+  - Added `hf_offline: bool = False` configuration in `backend/app/config.py`, updated `decider_service.py` and `scripts/bench_decider.py`.
+  - One-time Bedrock check executed: Converse API returned `ValidationException: Operation not allowed` on Claude Haiku in `us-east-1`; Bedrock LLM Judge baseline is marked `SKIPPED`.
+
+
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
 - Real-world setup failure & fix: `hf-xet` (Rust background writer in `huggingface_hub`) fails on Windows with `File reconstruction error: Internal Writer Error: Background writer channel closed`. Removing `hf-xet` to force standard HTTP chunked download completely resolves the stall without requiring special toolchains.
