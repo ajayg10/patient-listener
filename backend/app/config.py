@@ -54,6 +54,7 @@ class EnvSettings(BaseSettings):
             "E:\\hf-cache" if os.name == "nt" and Path("E:/hf-cache").exists() else str(Path.home() / ".cache" / "huggingface")
         )
     )
+    regret_db_path: str = "backend/app/data/regrets.db"
     config_path: str = "config.yaml"
 
     model_config = SettingsConfigDict(
@@ -128,9 +129,13 @@ class AppConfig(BaseModel):
     def hf_home(self) -> str:
         return self.env.hf_home
 
-    @hf_home.setter
-    def hf_home(self, val: str) -> None:
-        self.env.hf_home = val
+    @property
+    def regret_db_path(self) -> str:
+        return self.env.regret_db_path
+
+    @regret_db_path.setter
+    def regret_db_path(self, val: str) -> None:
+        self.env.regret_db_path = val
 
 
 def load_config(config_yaml_path: str | Path | None = None) -> AppConfig:

@@ -25,6 +25,11 @@ hf-cache/
 backend/eval/results/
 !backend/eval/results/.gitkeep
 
+# Database & Regret Log
+*.db
+*.sqlite3
+backend/app/data/
+
 # IDE / OS
 .vscode/
 .idea/
