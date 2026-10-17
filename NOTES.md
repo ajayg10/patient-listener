@@ -11,9 +11,11 @@
 | B4 | Reply agent | DONE | 2026-10-17 |
 | B5 | Baselines, dataset, eval harness | DONE | 2026-10-17 |
 | B5.5 | Audit & honesty check | DONE | 2026-10-17 |
+| B5.6 | Ambiguity, oracle bound & cache audit | DONE | 2026-10-17 |
+| B5.7 | Verification, Bayes oracle & commit hygiene | DONE | 2026-10-17 |
 | B6 | Pace profile + regret log | TODO | |
 | B7 | Confidence-aware policy | TODO | |
-| B8 | Reusable pattern package | TODO | |
+| B8 | Reusable pattern package | DONE | 2026-10-17 |
 | B9 | API | TODO | |
 | F1 | Frontend scaffold + WS client | TODO | |
 | F2 | Live view | TODO | |
@@ -611,7 +613,220 @@
     - Text Heuristic (250ms dev-tuned): Acc 100.0% [98.8%, 100.0%], Premature 0.0%, Unnecessary Wait 0.0%, Delay P50 250 ms.
     - Decider (0ms Oracle) [MOCK-DECIDER]: Acc 95.4% [92.5%, 97.2%], Premature 4.6% [2.8%, 7.5%], Unnecessary Wait 0.0%, Delay P50 250 ms.
     - Decider (3190ms CPU) [MOCK-DECIDER]: Acc 100.0% [98.8%, 100.0%], Premature 0.0%, Unnecessary Wait 100.0%, Delay P50 2200 ms.
-- **Next step**: Step B6 — Pace profile + regret log.
+- **Next step**: Step B5.6 — Ambiguity, oracle bound & cache audit.
+
+## Step B5.6 — PLAN
+- **Goal**: Harden evaluation harness with an ambiguous category where syntactically complete text has probabilistic continuation sampled from persona habits (breaking trivial text heuristic parity), implement generator-aware `ORACLE-UPPER-BOUND`, audit cache key counts, enforce zero-fallback cache miss errors, generate per-persona and per-category tables, update `results.md` strictly programmatically with Definitions and exact denominators, write `scripts/gpu_run.md`, and test consistency.
+- **Approach**:
+  1. Cache Audit: Report exact count of turns and checkpoints per turn for dev and test. Explain the unique key count mathematically (60 distinct template texts * 5 checkpoints = ~300 unique state keys across dev and test). Recompute cache so all potential checkpoints `[250, 500, 800, 1200, 1800]` are cached. In `run_eval.py`, replace fallback with strict `raise KeyError` on cache miss, tracking hit/miss metrics.
+  2. Ambiguous Scenarios: In `generate_dataset.py`, add ambiguous category where text is syntactically complete (e.g. lists, dosages, afterthoughts), but ground truth continuation is sampled per persona continuation probability (30% for fast pauser, 50% for slow pauser, 60% for filler heavy). Ground truth is realistically noisy; text-only regex cannot score 100%.
+  3. Oracle Upper Bound: Implement `ORACLE-UPPER-BOUND` in `run_eval.py` that utilizes knowledge of persona pause distributions and continuation states to demonstrate theoretical performance ceiling.
+  4. Per-Persona and Per-Category Breakdowns: Compute metrics for Fixed 600/800/1200ms, Text Heuristic, Decider Virtual, and Oracle Bound broken down across 3 personas (`fast_pauser`, `slow_pauser`, `filler_heavy`) and 3 categories (`complete`, `incomplete`, `ambiguous`).
+  5. Results Documentation & Definitions: Generate `results.md` and `eval_results.json` directly from code. Include Definitions section with exact formulas, numerators, denominators ($N=324$ for premature, $N_{\text{complete}}$ for unnecessary wait, 800ms threshold). State B0 model provenance (34/40 = 85.0% on real model vs 33/40 = 82.5% on mock).
+  6. GPU Runbook: Write `scripts/gpu_run.md` with complete copy-paste instructions for Google Colab and Kaggle GPU execution.
+  7. Consistency Test: Add test asserting every number rendered in `results.md` exists in `eval_results.json`.
+- **Files expected**:
+  - `NOTES.md`
+  - `backend/eval/generate_dataset.py`
+  - `backend/eval/data/dev_turns.jsonl`
+  - `backend/eval/data/test_turns.jsonl`
+  - `scripts/precompute_decisions.py`
+  - `backend/eval/data/decisions_cache.jsonl`
+  - `backend/eval/run_eval.py`
+  - `backend/eval/results/eval_results.json`
+  - `results.md`
+  - `scripts/gpu_run.md`
+  - `backend/tests/test_eval.py`
+
+## Step B5.6 — DONE
+- **Status**: DONE
+- **What was done**:
+  1. **Cache Key Audit & Zero-Fallback Replay**:
+     - Audited key count: 516 total turns (192 dev + 324 test) generated across 60 distinct template texts (24 dev + 36 test) * 5 checkpoints (`[250, 500, 800, 1200, 1800]`) = 300 unique state keys, plus 40 B0 cases = 340 unique keys.
+     - Precomputed all 340 states in `backend/eval/data/decisions_cache.jsonl` using MockDecider (448 total entries including historical snapshots).
+     - Modified `run_eval.py` to raise `KeyError` on any cache miss (zero online fallback). Replay executed with 2,281 cache hits and 0 cache misses.
+  2. **Harder Synthetic Data with Ambiguous Turns**:
+     - Added `ambiguous` category in `generate_dataset.py` where text is syntactically complete (e.g. lists, medication requests, appointments), but ground truth continuation is probabilistically sampled per persona `continuation_prob` (fast: 30%, slow: 50%, filler: 65%).
+     - Test split size preserved at 324 turns (108 complete, 108 incomplete, 108 ambiguous). Dev split: 192 turns (48 complete, 48 incomplete, 96 ambiguous).
+     - Breaking trivial regex: Because ambiguous turns appear complete, the `TextHeuristicBaseline` drops from 100.0% to 81.8% accuracy (18.2% premature interruptions).
+  3. **Generator-Aware Oracle Upper Bound**:
+     - Implemented `ORACLE-UPPER-BOUND` in `run_eval.py` representing theoretical policy ceiling knowing persona continuation states (100.0% accuracy, 0.0% premature interruptions, 250 ms median delay).
+  4. **Per-Persona and Per-Category Performance Breakdowns**:
+     - Computed and tabulated breakdowns across 3 personas (`fast_pauser`, `slow_pauser`, `filler_heavy`) and 3 categories (`complete`, `incomplete`, `ambiguous`).
+     - Demonstrates empirically that Fixed 600ms causes 57.4% premature interruptions on slow pausers versus 0.0% on fast pausers.
+  5. **Results Documentation & Metric Definitions**:
+     - Added Section 5 (Definitions) specifying exact formulas, numerators, and denominators: Premature Interruption ($N=324$), Unnecessary Wait ($N_{\text{complete}}=157$, 800ms global threshold), and Delay P50/P95 ($N_{\text{complete}}=157$).
+     - Updated B0 40-case table attributing real model weights (34/40, 85.0% on CPU) vs MockDecider (33/40, 82.5%).
+     - All markdown tables, findings, and numbers generated programmatically from `eval_results.json`.
+  6. **GPU Execution Guide**:
+     - Created `scripts/gpu_run.md` with complete, copy-paste instructions for Colab and Kaggle GPU precomputation and benchmarking.
+  7. **Testing**:
+     - 30/30 unit tests passing in 1.54s (`pytest`), including `test_results_md_consistent_with_json` (asserting every number in `results.md` exists in `eval_results.json`) and `test_cache_miss_raises_error`.
+- **Files changed**:
+  - `NOTES.md`
+  - `backend/eval/data/personas.yaml`
+  - `backend/eval/generate_dataset.py`
+  - `backend/eval/data/dev_turns.jsonl`
+  - `backend/eval/data/test_turns.jsonl`
+  - `scripts/precompute_decisions.py`
+  - `backend/eval/data/decisions_cache.jsonl`
+  - `backend/eval/metrics.py`
+  - `backend/eval/run_eval.py`
+  - `backend/eval/results/eval_results.json`
+  - `results.md`
+  - `scripts/gpu_run.md`
+  - `backend/tests/test_eval.py`
+- **Measured numbers**:
+  - Test split size: 324 turns (157 complete, 167 incomplete).
+  - Main comparison:
+    - Fixed 600ms: Acc 61.7%, Premature 35.2%, Unnecessary Wait 6.4%, Delay P50 600 ms.
+    - Fixed 800ms: Acc 63.0%, Premature 19.8%, Unnecessary Wait 35.7%, Delay P50 800 ms.
+    - Fixed 1200ms: Acc 69.8%, Premature 0.0%, Unnecessary Wait 100.0%, Delay P50 1006 ms.
+    - Text Heuristic (250ms dev-tuned): Acc 81.8%, Premature 18.2%, Unnecessary Wait 0.0%, Delay P50 250 ms.
+    - Decider (0ms latency) [MOCK-DECIDER]: Acc 81.8%, Premature 18.2%, Unnecessary Wait 0.0%, Delay P50 250 ms.
+    - Decider (3190ms CPU) [MOCK-DECIDER]: Acc 100.0%, Premature 0.0%, Unnecessary Wait 100.0%, Delay P50 2200 ms.
+    - ORACLE-UPPER-BOUND: Acc 100.0%, Premature 0.0%, Unnecessary Wait 0.0%, Delay P50 250 ms.
+- **Next step**: Step B8 — Reusable patient listener pattern package.
+
+## Step B8 — PLAN
+- **Goal**: Create standalone, production-ready `patient_listener_pattern/` reusable package (zero imports from `backend/`) implementing an `InterventionHandler` that hooks into the Strands Agent loop (`before_invocation` / `before_model_call`) to steer conversational turn-taking by suppressing model generation (`Deny`) during user pauses and releasing generation (`Proceed`) once the floor is yielded.
+- **Approach**:
+  1. `patient_listener_pattern/decision.py`:
+     - Typed dataclasses: `TurnState`, `PolicyThresholds`, `Action` ("WAIT" | "RESPOND").
+     - Default system question: `TURN_COMPLETE_QUESTION` (options: `["WAIT", "RESPOND"]`).
+     - Pure policy function: `policy(probs, silence_ms, thresholds) -> Action`.
+  2. `patient_listener_pattern/handler.py`:
+     - `PatientListenerInterventionHandler(InterventionHandler)`:
+       - Injected `decider: Callable[[str, ChoiceQuestion], Decision]` (decoupling compute backend).
+       - Lifecycle methods `before_invocation` and `before_model_call`.
+       - Reads silence and transcript, executes policy, and maps `WAIT` -> `Deny(...)` and `RESPOND` -> `Proceed()`.
+  3. `patient_listener_pattern/example.py`:
+     - Standalone executable script running offline with `MockDecider` and local mock agent, stepping through a scripted conversation timeline.
+  4. `patient_listener_pattern/README.md`:
+     - Under-10-line drop-in guide, threshold tuning, and caveats.
+  5. `patient_listener_pattern/tests/test_pattern.py`:
+     - Unit tests verifying standalone imports, policy thresholds, and handler interventions.
+- **Files expected**:
+  - `patient_listener_pattern/__init__.py`
+  - `patient_listener_pattern/decision.py`
+  - `patient_listener_pattern/handler.py`
+  - `patient_listener_pattern/example.py`
+  - `patient_listener_pattern/README.md`
+  - `patient_listener_pattern/tests/test_pattern.py`
+  - `NOTES.md`
+
+## Step B8 — DONE
+- **Status**: DONE
+- **What was done**:
+  1. **Investigated Strands Intervention Architecture**:
+     - Subclasses `InterventionHandler` from `strands.interventions` and implements `before_invocation` / `before_model_call`.
+     - Action mapping: Returning `Deny(reason=...)` suppresses LLM response generation and sets assistant message to `DENIED: <reason>`. Returning `Proceed()` yields the floor and executes model generation normally.
+  2. **Created Standalone `patient_listener_pattern` Package**:
+     - 100% standalone with zero imports from `backend/`.
+     - `decision.py`: Typed `TurnState`, `PolicyThresholds` (`respond_probability_threshold=0.65`, `min_silence_for_respond_ms=250.0`, `max_hold_ms=2200.0`), `TURN_COMPLETE_QUESTION`, and pure function `policy(probs, silence_ms, thresholds) -> Action` implementing safety cap (>=2200ms -> RESPOND), cadence floor (<250ms -> WAIT), and confidence threshold.
+     - `handler.py`: `PatientListenerInterventionHandler` intercepting `before_invocation` and `before_model_call`, invoking an injected decider callable (`(state_text, question) -> Decision`), and returning `Deny` (on WAIT) or `Proceed` (on RESPOND).
+     - `__init__.py`: Clean export of public API primitives.
+  3. **Offline Walkthrough Example**:
+     - `example.py`: Fully functional, zero-cloud walkthrough using `ScriptedDecider` and `MockStrandsModel(Model)`. Correctly executes in-process and prints `WAIT` (with model execution denied) then `RESPOND` (yielding agent response) across a scripted patient conversation timeline.
+  4. **Documentation & Caveats**:
+     - `README.md`: Under 10-line drop-in quickstart guide for any Strands Agent, threshold definitions, architectural diagram, and measured hardware caveats (distinguishing CPU latency ~3.2s from GPU <50ms, and noting all benchmark evidence is `SYNTHETIC`).
+  5. **Testing**:
+     - `patient_listener_pattern/tests/test_pattern.py`: 6 comprehensive unit tests covering pure policy boundaries, prompt state formatting and word budgeting, `WAIT` / `RESPOND` handler actions, end-to-end agent integration, and verifying zero leakage from `backend/`.
+     - 36/36 tests passing in `pytest` (2.63s -> 3.33s).
+     - 100% clean with `ruff check .`.
+- **Files created/modified**:
+  - `patient_listener_pattern/__init__.py`
+  - `patient_listener_pattern/decision.py`
+  - `patient_listener_pattern/handler.py`
+  - `patient_listener_pattern/example.py`
+  - `patient_listener_pattern/README.md`
+  - `patient_listener_pattern/tests/__init__.py`
+  - `patient_listener_pattern/tests/test_pattern.py`
+  - `pyproject.toml`
+  - `NOTES.md`
+- **Measured numbers**:
+  - Zero imports from `backend/` confirmed via AST and runtime `sys.modules` audit in `test_zero_imports_from_backend`.
+  - Offline walkthrough: 100% local, 0 network requests, 0 AWS credentials required.
+  - Test suite: 36 total tests passing (all tests strictly mock-based, 0s real weight load time in pytest).
+- **Next step**: Step B6 (Pace profile + regret log) or Step B7 (Confidence-aware policy).
+
+## Step B5.7 — PLAN
+- **Goal**: Complete verification of Part 1 (results.md trace tests and B0 attribution), redefine Bayes-optimal oracle upper bound under irreducible noise, audit dataset diversity, and formally verify Strands InterventionHandler wiring with real Agent and stub model.
+- **Approach**:
+  1. Commit hygiene: Undo semicolon commits (92074e8, 05ff91c) via soft reset, split into single-type Conventional Commits:
+     - `fix: correct results report and add definitions`
+     - `feat: add ambiguous scenarios and oracle upper bound`
+     - `docs: add gpu run instructions`
+     - `test: add cache miss and category tests`
+     - `feat: add reusable patient listener pattern package`
+     - `test: add pattern handler tests`
+  2. Part 1 verification:
+     - Print B0 40-case table with exact backends named.
+     - Verify number-trace test between results.md and eval_results.json, demonstrating assertion failure on tampered copy.
+     - Document Bedrock model check result (SKIPPED due to UnrecognizedClientException).
+  3. Bayes-optimal oracle:
+     - Redefine oracle without realized outcome peeking: uses text category and persona continuation probability under 0.65 threshold.
+     - Report accuracy (91.7%), premature rate (2.2%), and realized continue rates on ambiguous turns per persona.
+  4. Dataset diversity audit:
+     - Count unique states, unique utterances, and lookups across dev and test.
+     - Add template text risk note to Risks & caveats.
+  5. Step B8 Strands verification:
+     - Document exact hook methods (`before_invocation`, `before_model_call`), received event properties, turn state extraction, and loop actions (`Proceed`, `Deny`, `Guide`).
+     - Compare `Deny` vs `Guide` for WAIT actions and make `wait_action_type` a configurable handler parameter.
+     - Run integration test verifying real `strands.Agent` running offline with stub model.
+     - Verify zero backend imports and run example via `uv run python patient_listener_pattern/example.py`.
+
+## Step B5.7 — DONE
+- **Status**: DONE
+- **What was done**:
+  1. **Part 1 Verification & Reporting**:
+     - B0 40-case validation subset:
+       * Real Weights on CPU: 34/40 (85.0%) [backend: local_cpu (AMD Ryzen 5 5500U, b0_spike.py)]
+       * MockDecider: 33/40 (82.5%) [backend: mock (MockDecider)]
+       * Fixed 800ms: 16/40 (40.0%)
+     - Number trace test: Verified `test_results_md_consistent_with_json` passes against active `eval_results.json`; verified it detects and fails immediately if any number in `results.md` is modified (e.g. 91.7% -> 99.9%).
+     - Bedrock model check: Attempted `boto3.client('bedrock').list_foundation_models()` -> `ClientError: UnrecognizedClientException: The security token included in the request is invalid`. Explicitly marked `SKIPPED` in results.md without placeholder model names.
+  2. **Bayes-Optimal Oracle Upper Bound**:
+     - Redefined `ORACLE-UPPER-BOUND` in `backend/eval/run_eval.py` without realized outcome peeking:
+       * `complete`: Predicts RESPOND at 250ms (Acc 100%, Premature 0%).
+       * `incomplete`: Predicts WAIT (Acc 100%, Premature 0%).
+       * `ambiguous`: Evaluates persona continuation probability under regret-aware policy threshold (0.65):
+         - `fast_pauser` (continuation_prob=0.30 -> P(complete)=0.70 >= 0.65): Predicts RESPOND at 250ms.
+         - `slow_pauser` (continuation_prob=0.50 -> P(complete)=0.50 < 0.65): Predicts WAIT (holds floor to avoid premature cutoff).
+         - `filler_heavy` (continuation_prob=0.65 -> P(complete)=0.35 < 0.65): Predicts WAIT.
+     - Realized continue rates on ambiguous test turns (n=36 per persona):
+       * `fast_pauser`: 7/36 continued (19.4%), 29/36 complete (80.6%).
+       * `slow_pauser`: 26/36 continued (72.2%), 10/36 complete (27.8%).
+       * `filler_heavy`: 26/36 continued (72.2%), 10/36 complete (27.8%).
+     - Measured Bayes-optimal oracle metrics:
+       * Accuracy: 91.7% [88.1%, 94.2%] (297/324)
+       * Premature Interruption Rate: 2.2% [1.1%, 4.4%] (7/324)
+       * Unnecessary Wait Rate: 12.7% [8.4%, 18.9%] (20/157)
+       * Response Delay P50: 250.0 ms [250.0, 250.0] ms
+  3. **Dataset Diversity Audit**:
+     - DEV: 192 turns, 24 unique utterances, 104 unique evaluated states, 664 state lookups.
+     - TEST: 324 turns, 36 unique utterances, 156 unique evaluated states, 1,136 state lookups.
+     - Total across splits: 60 unique utterances, 300 unique states across 5 checkpoints.
+  4. **Strands Agent Wiring & Verification**:
+     - Exact hooks: `strands.interventions.InterventionHandler` methods `before_invocation` (receives `BeforeInvocationEvent`) and `before_model_call` (receives `BeforeModelCallEvent`).
+     - Event properties: `event.agent`, `event.messages`, `event.cancel`, `event.invocation_state`, `event.projected_input_tokens`.
+     - Turn state: Extracted from message context via `_default_extract_state` or injected via `get_turn_state` callback.
+     - Action comparison:
+       * `Deny(reason=...)`: Halts execution immediately before model call, consuming 0 LLM tokens, returning `DENIED: <reason>`. Used as default for WAIT to hold conversational silence.
+       * `Guide(feedback=..., reason=...)`: Injects steering feedback into the agent loop to produce backchannels. Configured via `wait_action_type="guide"`.
+     - Offline execution: Added root `README.md` and wheel build package targets to `pyproject.toml`; confirmed offline execution via `uv run python patient_listener_pattern/example.py`.
+     - Tests: 37/37 tests passing in pytest (3.38s).
+- **Files created/modified**:
+  - `README.md`
+  - `pyproject.toml`
+  - `backend/eval/run_eval.py`
+  - `backend/eval/results/eval_results.json`
+  - `results.md`
+  - `patient_listener_pattern/handler.py`
+  - `patient_listener_pattern/__init__.py`
+  - `patient_listener_pattern/README.md`
+  - `patient_listener_pattern/tests/test_pattern.py`
+  - `NOTES.md`
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
@@ -631,3 +846,4 @@
 - C: drive has 4.31 GB free; all Hugging Face caches (`HF_HOME`) and virtual environments must strictly remain on drive E:.
 - With CPU decisions at about 3 s and max_wait 2200 ms, a live CPU run degenerates into a fixed 2.2 s timeout. Live demos need a GPU host.
 - AWS credentials: `aws` CLI is not installed; shell environment variables `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc. are UNSET. `~/.aws/credentials` exists on the host filesystem (from prior Amazon Q/CLI usage) containing expired or inactive tokens, producing `InvalidClientTokenId` when boto3 attempts to authenticate with AWS STS. Neither `.env` nor `.env.example` contained placeholder keys. Config cleanly skips AWS vars when unset; Bedrock calls remain in `MOCK_BEDROCK=1` mode.
+- Dataset diversity: template text with small vocabulary (60 unique utterance templates across dev and test), no Bedrock-generated text; evaluations measure timing and prompt structure over synthetic templates, not natural acoustic variety.
