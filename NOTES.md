@@ -984,6 +984,33 @@
   - Added `hf_offline: bool = False` configuration in `backend/app/config.py`, updated `decider_service.py` and `scripts/bench_decider.py`.
   - One-time Bedrock check executed: Converse API returned `ValidationException: Operation not allowed` on Claude Haiku in `us-east-1`; Bedrock LLM Judge baseline is marked `SKIPPED`.
 
+## Step B6 — PLAN
+- **Goal**: Implement rolling per-user pace profile built solely from prior history sessions, sqlite3 regret log, state builder profile formatting under token ceilings, 4-way ablation on identical test split, and unified GPU precomputation plan.
+- **Approach**:
+  1. `backend/app/pace_profile.py`:
+     - Per-user rolling statistics built from that user's prior sessions only: pause lengths after which they resumed vs finished (median and p75 of each), filler rate, typical words before a pause.
+     - Deterministic 1-line text representation capped at 30 tokens; track real token count. Empty profile on cold start yielding identical base state.
+  2. `backend/app/state_builder.py`:
+     - Append profile line when present. Assert total state remains strictly under token ceiling in unit tests.
+  3. `backend/app/regret_log.py`:
+     - SQLite3 table (`ts`, `user_id`, `session_id`, `state_text`, `probs`, `silence_ms`, `action`) with raw SQL only (no ORM).
+     - `log_regret`, `list_regrets`, `regret_stats`. Premature interruption at pause X recorded as "resumed after X" in rolling profile.
+  4. Tests in `backend/tests/test_profile_and_regret.py`:
+     - Test user's profile uses ONLY that user's history sessions (leakage test: no test-turn events included).
+     - Cold start produces identical state to base state.
+     - Regret events shift profile in expected direction.
+     - Summary is 100% deterministic.
+  5. 4-Way Ablation on identical test split & latency conditions:
+     - (a) Decider base (virtual decider with base states)
+     - (b) Decider + profile (virtual decider with profile-augmented states)
+     - (c) Text heuristic with global threshold (250ms dev-tuned)
+     - (d) NEW CONTROL: Text heuristic with per-user pause threshold from profile (no model)
+     - Report with cluster bootstrap CIs per persona and per category. If (d) matches (b), state it plainly.
+  6. GPU Precompute Planning:
+     - Update `scripts/precompute_decisions.py` and `scripts/gpu_run.md` for single unified precompute: base states, profile states, and Q2 mid_thought across dev and test.
+     - Resumable, deduplicated by state text, skips cached keys, prints cache file name.
+     - Enumerate unique keys and verify runtime at 240 ms per call is well under 90 minutes.
+
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.

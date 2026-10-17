@@ -53,7 +53,10 @@ class StateBuilder:
             f"[Silence: {silence_ms} ms]",
         ]
 
-        if self.cfg.include_pace_summary and pace_summary:
-            parts.append(f"Pace profile: {pace_summary.strip()}")
+        if self.cfg.include_pace_summary and pace_summary and pace_summary.strip():
+            clean_pace = pace_summary.strip()
+            if not clean_pace.startswith("Pace profile:") and not clean_pace.startswith("[Pace"):
+                clean_pace = f"Pace profile: {clean_pace}"
+            parts.append(clean_pace)
 
         return "\n".join(parts)

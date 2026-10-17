@@ -345,20 +345,34 @@ def generate_dataset() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list
         pause_cfg = persona_info["mid_thought_pause"]
         end_cfg = persona_info["turn_end_pause"]
 
-        observed_pauses = []
+        resumed_pauses: list[int] = []
+        finished_pauses: list[int] = []
         for _ in range(5):
             mid_p = sample_pause_ms(pause_cfg["mean_ms"], pause_cfg["std_ms"], pause_cfg["min_ms"], pause_cfg["max_ms"], jitter)
             end_p = sample_pause_ms(end_cfg["mean_ms"], end_cfg["std_ms"], end_cfg["min_ms"], end_cfg["max_ms"], jitter)
-            observed_pauses.extend([mid_p, end_p])
+            resumed_pauses.append(mid_p)
+            finished_pauses.append(end_p)
 
+        observed_pauses = [p for pair in zip(resumed_pauses, finished_pauses) for p in pair]
         sorted_pauses = sorted(observed_pauses)
+
+        typical_words = {
+            "fast_pauser": ["please", "thanks", "now"],
+            "slow_pauser": ["so", "well", "think"],
+            "filler_heavy": ["um", "like", "uh"],
+        }.get(u["archetype"], ["so", "um"])
+
         user_histories.append({
             "user_id": user_id,
             "persona_name": persona_info["name"],
             "archetype": u["archetype"],
             "jitter_ms": jitter,
+            "resumed_pauses_ms": resumed_pauses,
+            "finished_pauses_ms": finished_pauses,
             "observed_pauses_ms": observed_pauses,
             "median_pause_ms": sorted_pauses[len(sorted_pauses) // 2],
+            "filler_rate": persona_info.get("filler_prob", 0.10),
+            "typical_words": typical_words,
             "sample_count": len(observed_pauses),
             "generation_method": "template",
         })
