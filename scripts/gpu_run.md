@@ -52,16 +52,23 @@ print("  DECIDER_BACKEND:", os.environ["DECIDER_BACKEND"])
 ```bash
 !python scripts/bench_decider.py
 ```
-*Expected output: warmup + warm inference median and p95 latencies across 20, 60, and 150 token states on GPU (typically ~20-50 ms).*
+*Expected output: warmup + warm inference median and p95 latencies across 20, 60, and 150 token states on GPU (Tesla T4 median ~235.6 ms).*
 
-### Step 6: Precompute Decision Cache on GPU
+### Step 6: Verify Precomputation Coverage & Runtime
 ```bash
-# Runs single-process, resumable precomputation over all 340 required evaluation states
+# Verify all base states, pace profile variants, and Q2 mid_thought questions are enumerated
+!python scripts/precompute_decisions.py --enumerate
+```
+*Expected enumeration: exactly 8,450 unique states across dev and test splits, estimated at ~33.2 minutes total on Tesla T4 at 235.6 ms/call (well under the 90-minute limit).*
+
+### Step 7: Precompute Single Unified Decision Cache on GPU
+```bash
+# Runs single-process, fully resumable precomputation over all 8,450 states (skips cached keys)
 !python scripts/precompute_decisions.py local
 ```
-*The cache is automatically written to `backend/eval/data/decisions_cache.jsonl`.*
+*The cache is automatically written and flushed to `backend/eval/data/decisions_cache.jsonl`.*
 
-### Step 7: Download Precomputed Cache & Benchmark Output
+### Step 8: Download Precomputed Cache & Benchmark Output
 ```bash
 from google.colab import files
 

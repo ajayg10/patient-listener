@@ -91,10 +91,18 @@ def derive_resumed_text(turn: dict[str, Any]) -> str | None:
     return None
 
 
-def collect_unique_states(include_speech_resumed: bool = True) -> list[dict[str, Any]]:
+from backend.app.pace_profile import PaceProfileBuilder
+from backend.app.questions import QUESTIONS
+
+
+def collect_unique_states(
+    include_speech_resumed: bool = True,
+    include_profiles: bool = True,
+    include_q2: bool = True,
+) -> list[dict[str, Any]]:
     """Extract every unique (state_text, question) needed across all checkpoints,
 
-    including utterance prefixes, states after speech resumed, and B0 cases.
+    including base prefixes, profile variants, Q2 mid_thought, states after speech resumed, and B0 cases.
     """
     cfg = get_config()
     model_id = cfg.decider_model_id
@@ -112,47 +120,63 @@ def collect_unique_states(include_speech_resumed: bool = True) -> list[dict[str,
 
     unique_states: dict[str, dict[str, Any]] = {}
     sb = StateBuilder()
+    pace_builder = PaceProfileBuilder()
 
-    # 1. Precompute all checkpoints for initial utterance prefixes
-    for t in turns:
-        sb.clear()
-        sb.append_transcript(t["text"])
-
-        for cp in checkpoints:
-            state_text = sb.build_state_text(silence_ms=cp)
-            key = compute_cache_key(model_id, "turn_complete", state_text)
+    def add_state(st: str, cp: int, kind: str, split: str) -> None:
+        q_ids = ["turn_complete", "mid_thought"] if include_q2 else ["turn_complete"]
+        for q_id in q_ids:
+            key = compute_cache_key(model_id, q_id, st)
             if key not in unique_states:
                 unique_states[key] = {
                     "key": key,
                     "model_id": model_id,
-                    "question_id": "turn_complete",
-                    "state_text": state_text,
+                    "question_id": q_id,
+                    "state_text": st,
                     "checkpoint_ms": cp,
-                    "kind": "prefix",
-                    "split": t["_split"],
+                    "kind": kind,
+                    "split": split,
                 }
 
-        # 2. Precompute states after speech resumed
+    for t in turns:
+        # 1. Base prefix states
+        sb.clear()
+        sb.append_transcript(t["text"])
+        for cp in checkpoints:
+            st = sb.build_state_text(silence_ms=cp)
+            add_state(st, cp, "prefix", t["_split"])
+
+        # 2. Base speech-resumed states
         if include_speech_resumed:
             resumed_text = derive_resumed_text(t)
             if resumed_text and resumed_text != t["text"]:
                 sb.clear()
                 sb.append_transcript(resumed_text)
                 for cp in checkpoints:
-                    state_text = sb.build_state_text(silence_ms=cp)
-                    key = compute_cache_key(model_id, "turn_complete", state_text)
-                    if key not in unique_states:
-                        unique_states[key] = {
-                            "key": key,
-                            "model_id": model_id,
-                            "question_id": "turn_complete",
-                            "state_text": state_text,
-                            "checkpoint_ms": cp,
-                            "kind": "speech_resumed",
-                            "split": t["_split"],
-                        }
+                    st = sb.build_state_text(silence_ms=cp)
+                    add_state(st, cp, "speech_resumed", t["_split"])
 
-    # 3. Also precompute B0 feasibility cases (each case has its own silence_ms)
+        # 3. Pace profile states (for users with history)
+        if include_profiles:
+            uid = t.get("user_id", "")
+            prof = pace_builder.build_profile(uid)
+            rendered = prof.render()
+            if rendered:
+                sb.clear()
+                sb.append_transcript(t["text"])
+                for cp in checkpoints:
+                    st = sb.build_state_text(silence_ms=cp, pace_summary=rendered)
+                    add_state(st, cp, "prefix_profile", t["_split"])
+
+                if include_speech_resumed:
+                    resumed_text = derive_resumed_text(t)
+                    if resumed_text and resumed_text != t["text"]:
+                        sb.clear()
+                        sb.append_transcript(resumed_text)
+                        for cp in checkpoints:
+                            st = sb.build_state_text(silence_ms=cp, pace_summary=rendered)
+                            add_state(st, cp, "speech_resumed_profile", t["_split"])
+
+    # 4. Also precompute B0 feasibility cases (each case has its own silence_ms)
     b0_path = REPO_ROOT / "backend" / "eval" / "data" / "b0_cases.jsonl"
     if b0_path.exists():
         with open(b0_path, "r", encoding="utf-8") as f:
@@ -161,18 +185,8 @@ def collect_unique_states(include_speech_resumed: bool = True) -> list[dict[str,
                     case = json.loads(line)
                     sb.clear()
                     sb.append_transcript(case["text"])
-                    state_text = sb.build_state_text(silence_ms=case["silence_ms"])
-                    key = compute_cache_key(model_id, "turn_complete", state_text)
-                    if key not in unique_states:
-                        unique_states[key] = {
-                            "key": key,
-                            "model_id": model_id,
-                            "question_id": "turn_complete",
-                            "state_text": state_text,
-                            "checkpoint_ms": case["silence_ms"],
-                            "kind": "b0_case",
-                            "split": "b0",
-                        }
+                    st = sb.build_state_text(silence_ms=case["silence_ms"])
+                    add_state(st, case["silence_ms"], "b0_case", "b0")
 
     return list(unique_states.values())
 
@@ -228,7 +242,12 @@ def run_precompute(force_backend: str | None = None) -> None:
     uncached = [item for item in unique_items if item["key"] not in cache]
     n_uncached = len(uncached)
 
-    unit_time_s = REMOTE_GPU_ESTIMATE_S if backend == "remote" else MEASURED_CPU_MEDIAN_S
+    if backend == "mock":
+        unit_time_s = 0.001
+    elif backend == "remote":
+        unit_time_s = REMOTE_GPU_ESTIMATE_S
+    else:
+        unit_time_s = MEASURED_CPU_MEDIAN_S
     estimated_seconds = n_uncached * unit_time_s
     estimated_minutes = estimated_seconds / 60.0
 
@@ -282,7 +301,8 @@ def run_precompute(force_backend: str | None = None) -> None:
     with open(CACHE_PATH, "a", encoding="utf-8") as f:
         for item in uncached:
             count += 1
-            decision: Decision = client.decide(item["state_text"], TURN_COMPLETE_QUESTION)
+            question = QUESTIONS.get(item["question_id"], TURN_COMPLETE_QUESTION)
+            decision: Decision = client.decide(item["state_text"], question)
 
             entry = {
                 "key": item["key"],

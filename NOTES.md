@@ -1011,6 +1011,42 @@
      - Resumable, deduplicated by state text, skips cached keys, prints cache file name.
      - Enumerate unique keys and verify runtime at 240 ms per call is well under 90 minutes.
 
+## Step B6 — DONE
+- **Pace Profile Builder (`backend/app/pace_profile.py`)**:
+  - Computes rolling conversational statistics built strictly from prior history sessions: pause lengths after which speaker resumed vs finished (median and p75 of each), filler rate, and top trailing words.
+  - Deterministic 1-line text format capped at 30 tokens (`count_tokens` enforces $\le 30$). Cold start (no history) yields empty string `""`.
+  - State builder integration (`backend/app/state_builder.py`): appends profile line cleanly when present; cold start produces exact base state text (`Speaker: "..."\n[Silence: X ms]`). Total state stays strictly under 100 tokens ceiling.
+
+- **SQLite3 Regret Log (`backend/app/regret_log.py`)**:
+  - Implemented with standard library `sqlite3` and raw SQL (no ORM).
+  - Schema: `id`, `ts`, `user_id`, `session_id`, `state_text`, `probs`, `silence_ms`, `action`, with indexed `user_id`.
+  - Functions: `log_regret`, `list_regrets`, `regret_stats`.
+  - Integration: Premature interruption at pause $X$ counts as "resumed after $X$" in profile builder, shifting pause distribution upwards.
+  - Path configured via `config.py` (`regret_db_path`), gitignored via `*.db` and `backend/app/data/`.
+
+- **Test Suite (`backend/tests/test_profile_and_regret.py`)**:
+  - 6 unit tests passing (48/48 suite total):
+    * Leakage guard: Verified test user profiles use ONLY history sessions (asserted zero test-split turn events included).
+    * Cold start equivalence to base state.
+    * Regret events shift profile in expected direction (tested median and p75 increase).
+    * Summary determinism and token ceiling ($\le 30$ tokens line, $< 100$ tokens total state).
+    * SQLite CRUD and stats using temporary test databases.
+
+- **Ablation Variants (Evaluated on 360 test turns across 30 users)**:
+  - (a) Decider Base (236ms GPU, Tesla T4) [MOCK-DECIDER]: Accuracy 80.3% [Cluster 95% CI: 73.6%, 86.9%], Premature 19.7% [13.1%, 26.4%], Delay P50 = 486 ms.
+  - (b) Decider + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER]: Accuracy 99.7% [Cluster 95% CI: 98.9%, 100.0%], Premature 0.3% [0.0%, 1.1%], Delay P50 = 1036 ms.
+  - (c) Text Heuristic Global Threshold (250ms dev-tuned): Accuracy 75.3% [Cluster 95% CI: 70.0%, 80.6%], Premature 24.7% [19.4%, 30.0%], Delay P50 = 250 ms.
+  - (d) NEW CONTROL: Per-User Text Heuristic (Profile Threshold, No Model): Accuracy 86.9% [Cluster 95% CI: 82.2%, 91.1%], Premature 12.8% [8.6%, 17.5%], Delay P50 = 707 ms.
+  - **Persona Pause Analysis**:
+    * On slow pausers: Global text heuristic suffers 25.8% premature interruptions at 250ms. Per-User Text Heuristic cuts premature interruptions to 12.5% purely by applying the user's observed pause threshold without neural model inference. Decider + Profile achieves 0.0% premature interruptions on slow pausers.
+    * Observation: The per-user heuristic control confirms that personalized pause thresholding accounts for a significant portion of the profile benefit even before neural inference.
+
+- **Single Unified GPU Precompute Plan**:
+  - `scripts/precompute_decisions.py --enumerate`: Enumerates exactly 8,450 unique states across dev and test splits, covering base states, pace profile variants, and Q2 `mid_thought`.
+  - Estimated runtime on Tesla T4 GPU (at 235.6 ms median): 33.18 minutes total (well within Colab session limits and under 90-minute ceiling).
+  - Resumable: Skips cached keys, flushes to `backend/eval/data/decisions_cache.jsonl`.
+  - Documented in `scripts/gpu_run.md`.
+
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
