@@ -6,6 +6,18 @@
 > [!IMPORTANT]
 > **SYNTHETIC BENCHMARK**: Evaluated on 324 synthetic test turns (154 complete, 170 incomplete) across 9 users (36 turns/user) in 3 conflicting persona archetypes (fast, slow, filler-heavy). Zero leakage: dev and test splits strictly partition users and templates.
 
+### Dataset Reconciled Count Table (Current Split)
+
+| Split | Turns | Users | Unique Utterances | Lookups | Unique States Reached | Cache Hits | Misses |
+|---|---|---|---|---|---|---|---|
+| DEV | 192 | 12 | 24 | 685 | 104 | 685 | 0 |
+| TEST | 324 | 9 | 36 | 1146 | 155 | 1146 | 0 |
+| TOTAL | 516 | 21 | 60 | 1831 | 259 | 1831 | 0 |
+
+- **Lookups difference (dev 664 -> 685, test 1,136 -> 1,146)**: Increasing ambiguous share to 50% in B5.8 extended silences so more turns reached later pause checkpoints before speech resumed.
+- **States difference (test 156 -> 155)**: In the B5.8 test realization, one slow template never experienced a silence lasting to the 1800 ms checkpoint.
+- **2,250 vs 1,831 lookups**: 1,831 (685 dev + 1,146 test) is the single-pass lookup count, whereas 2,250 was the cumulative query count across all latency sweeps in `run_eval.py`.
+
 ## 1. Test Split Turn-Taking Comparison (n=324 turns across 9 users, 36 turns/user)
 
 | Approach | Accuracy (Cluster 95% CI) | Accuracy (Wilson 95% CI) | Premature Interruption (Cluster 95% CI) | Premature (Wilson 95% CI) | Unnecessary Wait (Cluster 95% CI) | Unnecessary Wait (Wilson 95% CI) | Delay P50 (Bootstrap 95% CI) | Delay P95 | Latency Condition |

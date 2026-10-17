@@ -291,4 +291,62 @@ def test_results_md_consistent_with_json():
     assert len(missing) == 0, f"Found numbers in results.md not present in eval_results.json: {missing}"
 
 
+def test_results_md_counts_match_table():
+    """Fails if results.md quotes a count that differs from the reconciled dataset count table."""
+    from backend.app.config import get_config
+    from backend.eval.run_eval import compute_reconciled_counts, load_cache
+
+    cfg = get_config()
+    cache = load_cache()
+    model_id = cfg.decider_model_id
+    checkpoints = sorted(cfg.turn_manager.checkpoints_ms)
+    max_wait = cfg.turn_manager.max_wait_ms
+
+    expected = compute_reconciled_counts(cache, model_id, checkpoints, max_wait)
+
+    md_path = DATA_DIR.parent.parent.parent / "results.md"
+    assert md_path.exists(), "results.md must exist"
+
+    with open(md_path, "r", encoding="utf-8") as f:
+        md_text = f.read()
+
+    # Find the Dataset Reconciled Count Table in results.md
+    reconciled_rows = {}
+    in_reconciled_table = False
+    for line in md_text.splitlines():
+        if "### Dataset Reconciled Count Table" in line:
+            in_reconciled_table = True
+            continue
+        if in_reconciled_table:
+            if line.startswith("|") and not line.startswith("|---") and not line.startswith("| Split"):
+                parts = [p.strip() for p in line.split("|")[1:-1]]
+                if len(parts) >= 8:
+                    split_name = parts[0].lower()
+                    reconciled_rows[split_name] = {
+                        "turns": int(parts[1].replace(",", "")),
+                        "users": int(parts[2].replace(",", "")),
+                        "unique_utterances": int(parts[3].replace(",", "")),
+                        "lookups": int(parts[4].replace(",", "")),
+                        "unique_states": int(parts[5].replace(",", "")),
+                        "hits": int(parts[6].replace(",", "")),
+                        "misses": int(parts[7].replace(",", "")),
+                    }
+            elif not line.startswith("|") and line.strip() and not line.startswith("-"):
+                in_reconciled_table = False
+
+    assert "dev" in reconciled_rows, "results.md must contain DEV row in Reconciled Count Table"
+    assert "test" in reconciled_rows, "results.md must contain TEST row in Reconciled Count Table"
+    assert "total" in reconciled_rows, "results.md must contain TOTAL row in Reconciled Count Table"
+
+    for split in ["dev", "test", "total"]:
+        for metric in ["turns", "users", "unique_utterances", "lookups", "unique_states", "hits", "misses"]:
+            actual_val = reconciled_rows[split][metric]
+            expected_val = expected[split][metric]
+            assert actual_val == expected_val, (
+                f"Count mismatch in results.md for {split.upper()} {metric}: "
+                f"results.md quotes {actual_val}, but actual table is {expected_val}"
+            )
+
+
+
 

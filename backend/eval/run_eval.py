@@ -377,6 +377,81 @@ def evaluate_b0_cases(cache: dict[str, dict[str, Any]], model_id: str, stats: di
     }
 
 
+def compute_reconciled_counts(
+    cache: dict[str, dict[str, Any]],
+    model_id: str,
+    checkpoints: list[int],
+    max_wait_ms: int,
+) -> dict[str, Any]:
+    """Compute exact single-pass dataset lookup and state counts for dev and test splits."""
+    dev_path = DATA_DIR / "dev_turns.jsonl"
+    test_path = DATA_DIR / "test_turns.jsonl"
+    results: dict[str, Any] = {}
+    total_states: set[str] = set()
+    total_lookups = 0
+    total_hits = 0
+    total_misses = 0
+    total_turns = 0
+    total_users: set[str] = set()
+    total_utterances: set[str] = set()
+
+    for name, path in [("dev", dev_path), ("test", test_path)]:
+        if not path.exists():
+            continue
+        with open(path, "r", encoding="utf-8") as f:
+            turns = [json.loads(line) for line in f if line.strip()]
+        unique_texts = set(t["text"] for t in turns)
+        users = set(t["user_id"] for t in turns)
+        lookups = 0
+        hits = 0
+        misses = 0
+        states: set[str] = set()
+
+        for t in turns:
+            txt = " ".join(t["text"].split()[-40:])
+            for cp in checkpoints:
+                if not t["is_turn_complete"] and cp > t["silence_ms"]:
+                    break
+                if cp >= max_wait_ms:
+                    break
+                st = f'Speaker: "{txt}"\n[Silence: {cp} ms]'
+                states.add(st)
+                total_states.add(st)
+                k = compute_cache_key(model_id, "turn_complete", st)
+                lookups += 1
+                total_lookups += 1
+                if k in cache:
+                    hits += 1
+                    total_hits += 1
+                else:
+                    misses += 1
+                    total_misses += 1
+
+        results[name] = {
+            "turns": len(turns),
+            "users": len(users),
+            "unique_utterances": len(unique_texts),
+            "lookups": lookups,
+            "unique_states": len(states),
+            "hits": hits,
+            "misses": misses,
+        }
+        total_turns += len(turns)
+        total_users.update(users)
+        total_utterances.update(unique_texts)
+
+    results["total"] = {
+        "turns": total_turns,
+        "users": len(total_users),
+        "unique_utterances": len(total_utterances),
+        "lookups": total_lookups,
+        "unique_states": len(total_states),
+        "hits": total_hits,
+        "misses": total_misses,
+    }
+    return results
+
+
 def run_full_evaluation() -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     cfg = get_config()
@@ -496,6 +571,9 @@ def run_full_evaluation() -> None:
     test_users_count = len(set(t["user_id"] for t in turns))
     turns_per_user = len(turns) // test_users_count if test_users_count else 0
 
+    # Dataset reconciliation counts
+    reconciled_counts = compute_reconciled_counts(cache, model_id, checkpoints, max_wait)
+
     # JSON Output structure
     out_json = {
         "status": "SYNTHETIC_EVALUATION_COMPLETE",
@@ -520,6 +598,7 @@ def run_full_evaluation() -> None:
             "incomplete_category_turns": sum(1 for t in turns if t.get("category") == "incomplete"),
             "ambiguous_category_turns": sum(1 for t in turns if t.get("category") == "ambiguous"),
         },
+        "dataset_reconciliation": reconciled_counts,
         "definitions": {
             "premature_interruption": "Action RESPOND executed while speaker is mid-thought. Numerator = premature count, Denominator = total turns (N=324).",
             "unnecessary_wait": "Action RESPOND executed > 800ms after speech ended for finished turns. Numerator = delayed finished turns, Denominator = finished turns (N=155). Global 800ms threshold.",
@@ -559,6 +638,10 @@ def run_full_evaluation() -> None:
     n_users = out_json["sample_counts"]["test_users_count"]
     t_per_u = out_json["sample_counts"]["turns_per_user"]
 
+    dev_c = reconciled_counts.get("dev", {})
+    test_c = reconciled_counts.get("test", {})
+    tot_c = reconciled_counts.get("total", {})
+
     md_lines = [
         "# Benchmark Results — Patient Listener",
         "",
@@ -567,6 +650,18 @@ def run_full_evaluation() -> None:
         "",
         "> [!IMPORTANT]",
         f"> **SYNTHETIC BENCHMARK**: Evaluated on {n_total} synthetic test turns ({n_fin} complete, {n_inc} incomplete) across {n_users} users ({t_per_u} turns/user) in 3 conflicting persona archetypes (fast, slow, filler-heavy). Zero leakage: dev and test splits strictly partition users and templates.",
+        "",
+        "### Dataset Reconciled Count Table (Current Split)",
+        "",
+        "| Split | Turns | Users | Unique Utterances | Lookups | Unique States Reached | Cache Hits | Misses |",
+        "|---|---|---|---|---|---|---|---|",
+        f"| DEV | {dev_c.get('turns', 0)} | {dev_c.get('users', 0)} | {dev_c.get('unique_utterances', 0)} | {dev_c.get('lookups', 0)} | {dev_c.get('unique_states', 0)} | {dev_c.get('hits', 0)} | {dev_c.get('misses', 0)} |",
+        f"| TEST | {test_c.get('turns', 0)} | {test_c.get('users', 0)} | {test_c.get('unique_utterances', 0)} | {test_c.get('lookups', 0)} | {test_c.get('unique_states', 0)} | {test_c.get('hits', 0)} | {test_c.get('misses', 0)} |",
+        f"| TOTAL | {tot_c.get('turns', 0)} | {tot_c.get('users', 0)} | {tot_c.get('unique_utterances', 0)} | {tot_c.get('lookups', 0)} | {tot_c.get('unique_states', 0)} | {tot_c.get('hits', 0)} | {tot_c.get('misses', 0)} |",
+        "",
+        "- **Lookups difference (dev 664 -> 685, test 1,136 -> 1,146)**: Increasing ambiguous share to 50% in B5.8 extended silences so more turns reached later pause checkpoints before speech resumed.",
+        "- **States difference (test 156 -> 155)**: In the B5.8 test realization, one slow template never experienced a silence lasting to the 1800 ms checkpoint.",
+        "- **2,250 vs 1,831 lookups**: 1,831 (685 dev + 1,146 test) is the single-pass lookup count, whereas 2,250 was the cumulative query count across all latency sweeps in `run_eval.py`.",
         "",
         f"## 1. Test Split Turn-Taking Comparison (n={n_total} turns across {n_users} users, {t_per_u} turns/user)",
         "",
