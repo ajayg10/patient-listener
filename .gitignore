@@ -1,0 +1,32 @@
+# Environment and secrets
+.env
+.env.local
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+
+# Model weights & HuggingFace caches
+hf-cache/
+.hf_home/
+*.safetensors
+*.pt
+*.bin
+
+# Evaluation results and data artifacts
+backend/eval/results/
+!backend/eval/results/.gitkeep
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db

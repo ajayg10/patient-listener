@@ -1,0 +1,24 @@
+turn_manager:
+  checkpoints_ms: [250, 500, 800, 1200, 1800]
+  max_wait_ms: 2200
+  silence_debounce_ms: 50
+
+policy:
+  confidence_hi: 0.70
+  confidence_lo: 0.30
+  reask_interval_ms: 300
+
+pace_profile:
+  default_p50_ms: 650
+  default_p90_ms: 1100
+  rolling_window: 20
+  min_observations: 3
+
+state_builder:
+  max_recent_words: 40
+  include_trailing_markers: true
+  include_pace_summary: true
+
+eval:
+  virtual_clock_latency_ms: 0
+  fixed_baseline_timeouts_ms: [600, 800, 1200]
