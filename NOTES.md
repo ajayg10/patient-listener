@@ -1075,6 +1075,43 @@
   6. CLI `--cache` Support:
      - Add `--cache <path>` to `run_eval.py`. Inspect provenance: if real, generate headline reports and findings; if mock, watermark `[MOCK-DECIDER]` and suppress decider claims.
 
+## Step B7 — DONE
+- **Unified Confidence-Aware Policy (`patient_listener_pattern/decision.py`, `backend/app/policy.py`)**:
+  - Implemented dual-threshold confidence-aware policy `policy(probabilities, silence_ms, thresholds, q2_probabilities)` with strict precedence:
+    * Safety cap: $silence\_ms \ge max\_hold\_ms \implies \text{RESPOND}$ (always wins).
+    * Cadence floor: $silence\_ms < 250 \implies \text{WAIT}$ (prevents premature cutoffs on initial pauses).
+    * Q1/Q2 Conflict resolution: If Q1 says done ($p(\text{turn\_complete}) \ge hi$) AND Q2 says mid-thought ($p(\text{mid\_thought}) \ge 0.50$), policy overrides to $\text{WAIT}$ (conflicting evidence -> keep listening).
+    * High confidence: $p(\text{RESPOND}) \ge hi \implies \text{RESPOND}$.
+    * Low confidence: $p(\text{RESPOND}) \le lo \implies \text{WAIT}$.
+    * Intermediate uncertainty: $lo < p(\text{RESPOND}) < hi \implies \text{WAIT}$ (keep waiting, query next checkpoint).
+  - Re-export parity: `backend.app.policy` directly re-exports `patient_listener_pattern.decision.policy` and `PolicyThresholds` so the repository maintains exactly ONE canonical policy implementation.
+- **DEV-Only Threshold Calibration (`backend/eval/calibration.py`)**:
+  - Grid search across 64 candidate $(hi, lo)$ threshold pairs evaluated strictly on DEV split turns (180 turns across 15 disjoint dev users).
+  - Dev-chosen optimal thresholds: $hi = 0.90$, $lo = 0.10$, $max\_hold\_ms = 2200$.
+  - Zero test leakage asserted: `calibrate_policy_on_dev` verifies no test turns or test users exist in the calibration set (raises `ValueError` upon contamination).
+  - Out-of-sample TEST performance reported in `results.md` under `Strands Decider 2B + Calibrated Policy`.
+- **Probability Reliability Diagram & Brier Score**:
+  - Binned on model probabilities $P(\text{RESPOND})$ (not confidence rescaling): 10 equal-width bins, mean predicted probability vs observed empirical turn completion rate.
+  - Strict invariant: Bins sum to $N$ verified on both splits ($N=644$ dev checkpoints, $N=1282$ test checkpoints).
+  - Measured Brier scores: DEV = 0.1235, TEST = 0.1306.
+  - Exported artifacts: `backend/eval/results/reliability_data.json` and `backend/eval/results/results_reliability.png` with provenance watermarking.
+- **Turn-Taking Pareto Frontiers (Trade-off Sweeps)**:
+  - Swept premature interruption rate vs response delay (P50 and P95) for:
+    * Fixed timeouts: 300 ms to 2000 ms.
+    * Text heuristic thresholds: 100 ms to 1200 ms.
+    * Decider policy $hi$ sweeps (0.55 to 0.90) at 3 latency conditions: 0 ms virtual oracle, 235.6 ms GPU (Tesla T4), and 3190.1 ms CPU.
+  - Exported artifacts: `backend/eval/results/pareto_data.json` and `backend/eval/results/results_pareto.png`. All Decider curves explicitly labeled `[MOCK-DECIDER]`.
+- **CLI Cache Provenance & Single-Command Evaluation**:
+  - `backend/eval/run_eval.py` accepts `--cache <path>` CLI argument (defaults to `decisions_cache.jsonl`).
+  - Strict provenance inspection: If mock, all Decider table rows and plots are watermarked `[MOCK-DECIDER]`, and Section 7 findings text is suppressed. When a real GPU precomputed cache is downloaded into place, a single command (`python backend/eval/run_eval.py`) generates un-watermarked headline tables and full measured findings text.
+- **Unit Testing**:
+  - Added `backend/tests/test_policy.py` testing:
+    * Policy re-export parity with `patient_listener_pattern`.
+    * Policy table exhaustive coverage for every logical branch (safety cap, floor, conflict rule, high confidence, low confidence, uncertainty band, missing probabilities).
+    * DEV calibration zero-leakage and contamination rejection.
+    * Reliability bin sum to $N$ invariant.
+  - Repo test suite: 52/52 passing. Ruff check: clean (0 errors).
+
 
 
 ## Article material (running list)
