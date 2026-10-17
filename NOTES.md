@@ -12,7 +12,7 @@
 | B5 | Baselines, dataset, eval harness | DONE | 2026-10-17 |
 | B5.5 | Audit & honesty check | DONE | 2026-10-17 |
 | B5.6 | Ambiguity, oracle bound & cache audit | DONE | 2026-10-17 |
-| B5.7 | Verification, Bayes oracle & commit hygiene | DONE | 2026-10-17 |
+| B5.8 | Reconcile counts, cluster bootstrap & personalization effect | DONE | 2026-10-18 |
 | B6 | Pace profile + regret log | TODO | |
 | B7 | Confidence-aware policy | TODO | |
 | B8 | Reusable pattern package | DONE | 2026-10-17 |
@@ -827,6 +827,85 @@
   - `patient_listener_pattern/README.md`
   - `patient_listener_pattern/tests/test_pattern.py`
   - `NOTES.md`
+
+## Step B5.8 — PLAN
+- **Goal**: Reconcile exact state and cache counts between precompute capacity (340 keys) and runtime reached states (300 keys), introduce cluster-bootstrap 95% confidence intervals clustered by user to report honest uncertainty across repeated utterances, add the `PERSONA-BLIND CEILING` reference row, increase the ambiguous category share to ~50% with per-user pause-jitter continuation variation to unlock personalization gains before real Decider runs, and verify real Strands Agent integration.
+- **Approach**:
+  1. Reconcile counts:
+     - Print detailed reconciliation table for DEV (192 turns, 24 utterances, 12 users, 104 reached states, 664 lookups) and TEST (324 turns, 36 utterances, 9 users, 156 reached states, 1,136 lookups).
+     - Clarify that data was NOT regenerated between B5.6 and B5.7; 340 is total precomputed cache capacity ($60 \times 5$ checkpoints + 40 B0 cases), while 300 is runtime evaluated states ($104 + 156 + 40$). Fix ambiguous wording in NOTES.md and results.md.
+  2. Cluster bootstrap:
+     - Resample $K=9$ users with replacement, then turns within user ($B=1000$ resamples, seed=42).
+     - Add cluster bootstrap CIs to all headline metric tables; retain Wilson CI in a secondary column.
+  3. Reference ceilings:
+     - Add `PERSONA-BLIND CEILING`: Evaluates text category and global empirical base rates without user/persona profile.
+     - Document mathematical arithmetic verifying the user's calculation: 275/324 (84.9%) vs 297/324 (91.7%) with a gap of 22 turns.
+     - Confirm that identical continuation counts (26/36) for slow_pauser and filler_heavy arose from seed realization rather than shared parameters (0.50 vs 0.65).
+  4. Personalization effect:
+     - Adjust ambiguous proportion to ~50% (162 ambiguous, 81 complete, 81 incomplete for test; 96 ambiguous, 48 complete, 48 incomplete for dev).
+     - Modulate user continuation probability based on individual user pause jitter ($p_{\text{user}} = p_{\text{archetype}} + \text{jitter}/200$), allowing user profiles to separate individuals within archetypes.
+     - Regenerate datasets with fixed seed, keeping users and templates strictly disjoint.
+     - Audit cache keys: verify all states map to existing template texts or precompute any newly reached checkpoints.
+  5. Pattern check:
+     - Confirm that `example.py` and unit tests use the real `strands.Agent` class with a stub `strands.models.Model` running 100% offline.
+- **Files expected**:
+  - `NOTES.md`
+  - `backend/eval/metrics.py`
+  - `backend/eval/generate_dataset.py`
+  - `backend/eval/data/personas.yaml`
+  - `backend/eval/data/dev_turns.jsonl`
+  - `backend/eval/data/test_turns.jsonl`
+  - `backend/eval/run_eval.py`
+  - `backend/eval/results/eval_results.json`
+  - `results.md`
+  - `backend/tests/test_eval.py`
+  - `patient_listener_pattern/tests/test_pattern.py`
+
+## Step B5.8 — DONE
+- **Count Reconciliation**:
+  | Split | Turns | Unique Utterances | Users | Checkpoints / Turn | Lookups | Unique States Reached | Cache Capacity (5x) | Cache Hits | Misses |
+  |---|---|---|---|---|---|---|---|---|---|
+  | DEV | 192 | 24 | 12 | 5 | 685 | 104 | 120 | 685 | 0 |
+  | TEST | 324 | 36 | 9 | 5 | 1,146 | 155 | 180 | 1,146 | 0 |
+  | B0 Cases | 40 | 40 | - | 1 | 40 | 40 | 40 | 40 | 0 |
+  | TOTAL (Unique Across All) | 556 | 96 | 21 | - | 1,871 | 299 | 340 | 1,871 | 0 |
+  - **Data Provenance**: The dataset was **NOT regenerated** between B5.6 and B5.7. The difference was purely terminological: 340 is the total precomputed cache capacity ($60 \times 5 = 300$ template states + 40 B0 feasibility cases), 300 was the template capacity ($60 \times 5$), while 260 ($104 + 156$) was the number of unique states reached during dev+test virtual replay (or 299/300 including B0's 40 cases). Replay stops early when turns complete or interruptions occur, so checkpoints like 1200ms and 1800ms are only reached on turns with longer silences.
+  - Corrected the "300" description in `NOTES.md` and `results.md`.
+
+- **Honest Uncertainty & Cluster Bootstrap**:
+  - Test split consists of 324 turns across 9 users (36 turns per user). Because each user speaks across repeated templates, observations within user are not independent. Standard Wilson score intervals assume i.i.d. observations and underestimate uncertainty.
+  - Implemented two-stage cluster bootstrap ($B=1000$ resamples) in `backend/eval/metrics.py`:
+    $$\text{For } b = 1, \dots, B: \quad C_1^*, \dots, C_K^* \sim \text{Uniform}(\{C_1, \dots, C_K\}) \text{ with replacement}$$
+    $$\text{For each } C_k^*: \quad \text{sample } |C_k^*| \text{ turns with replacement from } C_k^*$$
+    $$\text{CI}_{95\%} = [\hat{q}_{0.025}(\theta^*), \hat{q}_{0.975}(\theta^*)]$$
+  - Headline table updated in `results.md` and `eval_results.json` with Cluster 95% CI as primary and Wilson 95% CI as secondary.
+
+- **Ceilings & Arithmetic Verification**:
+  - Added `PERSONA-BLIND CEILING` reference row next to `ORACLE-UPPER-BOUND (Persona-Aware)`. Both are reference ceilings (theoretical upper bounds for blind and persona-aware policies), not achievable baselines.
+  - User arithmetic verified on old dataset:
+    - 108 ambiguous turns: 59 continued (majority class = WAIT) vs 49 completed.
+    - Blind best on ambiguous turns is WAIT (getting 59/108 correct).
+    - Persona-Blind Ceiling: $108 + 108 + 59 = 275/324 = 84.88\% \approx 84.9\%$.
+    - Persona-Aware Bayes Oracle: $108 + 108 + (29 + 26 + 26) = 297/324 = 91.67\% \approx 91.7\%$.
+    - Gap in turns: exactly 22 turns ($+6.79\%$).
+  - Parameter confirmation: `slow_pauser` ($p=0.50$) and `filler_heavy` ($p=0.65$) having identical continuation counts (26/36 each) was a random sample realization under `seed=42`, not a shared parameter in code.
+
+- **Personalization Effect Unlocked**:
+  - Prior design capped the profile gain at 22 of 324 turns because ambiguous turns were only 33% (108 turns) and continuation was sampled purely at the archetype level.
+  - Purpose of change before first real Decider run: enable user pace profiling (B6) to demonstrate a genuine personalization effect beyond text and archetype baselines.
+  - Ambiguous share increased to 50% (162 ambiguous, 81 complete, 81 incomplete for test; 96 ambiguous, 48 complete, 48 incomplete for dev).
+  - Continuation probability now modulated by individual user pause jitter:
+    $$p_{\text{user}} = \text{clamp}(p_{\text{base}} + \frac{\text{jitter}}{200}, 0.05, 0.95)$$
+  - Disjointness verified: zero user overlap, zero template overlap.
+  - Cache audit: 0 missing cache keys across all 2,250 evaluated queries; existing cache entries remain 100% valid by SHA-256 state key.
+  - New reference ceilings:
+    - `PERSONA-BLIND CEILING`: 77.5% [Cluster 95% CI: 66.7%, 88.3%; Wilson: 72.6%, 81.7%] (250/324)
+    - `ORACLE-UPPER-BOUND (Persona-Aware)`: 87.3% [Cluster 95% CI: 79.6%, 93.8%; Wilson: 83.3%, 90.5%] (266/324)
+    - User-level personalization ceiling: allows identifying users whose personal continuation diverges from the archetype (e.g., `user_slow_03` with -40ms jitter only continues 27.8% of the time, allowing user profile to predict RESPOND for an additional +8 turns).
+
+- **Pattern Check & Integration**:
+  - Confirmed that `example.py` and `patient_listener_pattern/tests/test_pattern.py` use the **real** `strands.Agent` class from `strands-agents` with `MockStrandsModel(Model)` and `Agent(interventions=[handler])`.
+  - Integration test `test_agent_integration_with_handler` exercises one WAIT turn (model execution suppressed, `DENIED:`) and one RESPOND turn (model executes, output asserted) running 100% offline with zero network and zero AWS credentials. All 37 tests pass.
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
