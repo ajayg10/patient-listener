@@ -1,0 +1,116 @@
+# SYNTHETIC PERSONAS SPECIFICATION
+# Purpose: Model conflicting pause distributions across distinct patient speaking archetypes.
+# Key property: A 700ms pause indicates 'turn_end' for fast_pauser, but 'mid_thought' for slow_pauser.
+
+archetypes:
+  fast_pauser:
+    name: "Fast Pauser (Brisk / Urgent)"
+    description: "Speaks rapidly with concise utterances and quick turn yields."
+    mid_thought_pause:
+      mean_ms: 350
+      std_ms: 60
+      min_ms: 200
+      max_ms: 500
+    turn_end_pause:
+      mean_ms: 700
+      std_ms: 100
+      min_ms: 550
+      max_ms: 1000
+    filler_prob: 0.10
+    users:
+      - id: "user_fast_01"
+        split: "dev"
+        jitter_ms: -30
+      - id: "user_fast_dev_02"
+        split: "dev"
+        jitter_ms: -10
+      - id: "user_fast_dev_03"
+        split: "dev"
+        jitter_ms: +15
+      - id: "user_fast_dev_04"
+        split: "dev"
+        jitter_ms: -20
+      - id: "user_fast_02"
+        split: "test"
+        jitter_ms: 0
+      - id: "user_fast_03"
+        split: "test"
+        jitter_ms: +25
+      - id: "user_fast_04"
+        split: "test"
+        jitter_ms: -15
+
+  slow_pauser:
+    name: "Slow Pauser (Deliberate / Elderly)"
+    description: "Speaks slowly and takes extended reflective pauses between clauses."
+    mid_thought_pause:
+      mean_ms: 850
+      std_ms: 120
+      min_ms: 650
+      max_ms: 1200
+    turn_end_pause:
+      mean_ms: 1500
+      std_ms: 200
+      min_ms: 1200
+      max_ms: 2200
+    filler_prob: 0.25
+    users:
+      - id: "user_slow_01"
+        split: "dev"
+        jitter_ms: +50
+      - id: "user_slow_dev_02"
+        split: "dev"
+        jitter_ms: +30
+      - id: "user_slow_dev_03"
+        split: "dev"
+        jitter_ms: -20
+      - id: "user_slow_dev_04"
+        split: "dev"
+        jitter_ms: +40
+      - id: "user_slow_02"
+        split: "test"
+        jitter_ms: 0
+      - id: "user_slow_03"
+        split: "test"
+        jitter_ms: -40
+      - id: "user_slow_04"
+        split: "test"
+        jitter_ms: +60
+
+  filler_heavy:
+    name: "Filler-Heavy Pauser (Hesitant / Anxious)"
+    description: "Frequently uses verbal fillers ('um', 'uh', 'like') and trailing connectors."
+    mid_thought_pause:
+      mean_ms: 750
+      std_ms: 150
+      min_ms: 500
+      max_ms: 1300
+    turn_end_pause:
+      mean_ms: 1100
+      std_ms: 180
+      min_ms: 800
+      max_ms: 1800
+    filler_prob: 0.85
+    users:
+      - id: "user_filler_01"
+        split: "dev"
+        jitter_ms: -20
+      - id: "user_filler_dev_02"
+        split: "dev"
+        jitter_ms: +10
+      - id: "user_filler_dev_03"
+        split: "dev"
+        jitter_ms: -10
+      - id: "user_filler_dev_04"
+        split: "dev"
+        jitter_ms: +20
+      - id: "user_filler_02"
+        split: "test"
+        jitter_ms: +30
+      - id: "user_filler_03"
+        split: "test"
+        jitter_ms: 0
+      - id: "user_filler_04"
+        split: "test"
+        jitter_ms: +45
+
