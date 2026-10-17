@@ -61,10 +61,11 @@ def compute_cache_key(model_id: str, question_id: str, state_text: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def load_cache() -> dict[str, dict[str, Any]]:
+def load_cache(cache_path: Path | None = None) -> dict[str, dict[str, Any]]:
+    path = cache_path or CACHE_PATH
     cache: dict[str, dict[str, Any]] = {}
-    if CACHE_PATH.exists():
-        with open(CACHE_PATH, "r", encoding="utf-8") as f:
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     item = json.loads(line)

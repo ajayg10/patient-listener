@@ -30,6 +30,7 @@
 | Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 75.3% [70.0%, 80.6%] | [70.6%, 79.5%] | 24.7% [19.4%, 30.0%] | [20.5%, 29.4%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 250 ms [250.0, 250.0] ms | 250 ms | mock cache, virtual clock |
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 80.3% [73.6%, 86.9%] | [75.9%, 84.1%] | 19.7% [13.1%, 26.4%] | [15.9%, 24.1%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 486 ms [485.6, 485.6] ms | 486 ms | mock cache, virtual clock |
 | Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 99.7% [98.9%, 100.0%] | [98.4%, 100.0%] | 0.3% [0.0%, 1.1%] | [0.1%, 1.6%] | 60.2% [41.1%, 78.5%] | [52.9%, 67.1%] | 1036 ms [1035.6, 1035.6] ms | 1436 ms | mock cache + profile, virtual clock |
+| Strands Decider 2B + Calibrated Policy (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | calibrated policy, virtual clock |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | mock cache, virtual clock |
 | Decider Sweep (100ms Sweep) [MOCK-DECIDER] | 76.9% [71.1%, 83.1%] | [72.3%, 81.0%] | 23.1% [16.9%, 28.9%] | [19.0%, 27.7%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 350 ms [350.0, 350.0] ms | 350 ms | mock cache, virtual clock |
 | Decider Sweep (300ms Sweep) [MOCK-DECIDER] | 81.4% [75.0%, 87.8%] | [77.0%, 85.1%] | 18.6% [12.2%, 25.0%] | [14.9%, 23.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 550 ms [550.0, 550.0] ms | 550 ms | mock cache, virtual clock |
@@ -61,6 +62,7 @@
 | Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 15.0% | 250 ms | 25.8% | 250 ms | 33.3% | 250 ms |
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 486 ms | 25.8% | 486 ms | 33.3% | 486 ms |
 | Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 736 ms | 0.0% | 1436 ms | 0.8% | 1036 ms |
+| Strands Decider 2B + Calibrated Policy (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
 | PERSONA-BLIND CEILING | 0.0% | 2200 ms | 0.0% | 250 ms | 0.0% | 250 ms |
 | ARCHETYPE-AWARE CEILING | 15.0% | 250 ms | 0.0% | 250 ms | 0.0% | 250 ms |
@@ -79,13 +81,32 @@
 | Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 100.0% | 250 ms | 0.0% | 50.6% | 49.4% |
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 486 ms | 0.0% | 60.6% | 39.4% |
 | Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 1036 ms | 0.0% | 99.4% | 0.6% |
+| Strands Decider 2B + Calibrated Policy (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
 | PERSONA-BLIND CEILING | 100.0% | 250 ms | 0.0% | 49.4% | 0.0% |
 | ARCHETYPE-AWARE CEILING | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
 | USER-AWARE CEILING | 100.0% | 250 ms | 0.0% | 63.9% | 7.8% |
 | ORACLE-UPPER-BOUND (Persona-Aware) | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
 
-## 4. Decider Hardware Latency Benchmarks & B0 Validation Set
+## 4. Policy Calibration, Probability Reliability & Pareto Frontiers
+
+### Policy Threshold Calibration (DEV Split Only)
+- **Grid Search Space**: 64 candidate (hi, lo) pairs searched on DEV split (180 turns).
+- **Dev-Selected Optimal Thresholds**: `hi = 0.90`, `lo = 0.10`, `max_hold_ms = 2200 ms`.
+- **Dev Calibration Metrics**: Accuracy: 100.0%, Premature: 0.0%, Score: 1.0000.
+- **Test Set Zero Leakage**: Test split was untouched during calibration (evaluated strictly out-of-sample).
+
+### Probability Reliability (Calibration on Probabilities, Not Confidence)
+- **DEV Split Brier Score**: 0.1235 (over 644 checkpoint predictions).
+- **TEST Split Brier Score**: 0.1306 (over 1282 checkpoint predictions).
+- **Reliability Artifacts**: [results_reliability.png](backend/eval/results/results_reliability.png) | [reliability_data.json](backend/eval/results/reliability_data.json).
+
+### Turn-Taking Pareto Frontiers (Premature Interruption Rate vs Response Delay)
+- Swept Fixed Timeouts (300ms to 2000ms), Text Heuristic Thresholds (100ms to 1200ms), and Decider Policy hi sweeps.
+- Evaluated across 3 latency conditions: 0 ms virtual oracle, 236 ms GPU (Tesla T4), and 3190 ms CPU.
+- **Pareto Artifacts**: [results_pareto.png](backend/eval/results/results_pareto.png) | [pareto_data.json](backend/eval/results/pareto_data.json).
+
+## 5. Decider Hardware Latency Benchmarks & B0 Validation Set
 
 ### Measured Decider Latency on GPU (Tesla T4, Google Colab)
 - **Device**: `cuda` (GPU: Tesla T4, real model weights)
@@ -103,7 +124,7 @@
 - Strands Decider 2B (Real Weights): 85.0% (34/40) [backend: local_cpu (AMD Ryzen 5 5500U, b0_spike.py)]
 - Strands Decider 2B [MOCK-DECIDER]: 82.5% (33/40) [backend: mock (MockDecider)]
 
-## 5. Metric Definitions & Protocol
+## 6. Metric Definitions & Protocol
 - **Premature Interruption Rate**: Fraction of all test turns where the system yielded `RESPOND` while speaker was mid-thought. Numerator = premature interruption count, Denominator = 360 (total test turns).
 - **Unnecessary Wait Rate**: Fraction of completed turns where agent waited > 800 ms before responding. Numerator = delayed turns, Denominator = 181 (total completed turns). Threshold is global 800 ms.
 - **Response Delay (P50/P95)**: Elapsed time in milliseconds from speech end to agent floor yield, evaluated exclusively over completed turns (n=181).
@@ -111,9 +132,6 @@
 - **Uncertainty Intervals**: Headline tables report non-parametric two-stage cluster bootstrap 95% intervals (B=1000 resamples: sample users with replacement, then sample turns within user with replacement) to account for turn clustering across 30 users (12 turns/user). Secondary column reports standard Wilson 1927 score intervals for comparison.
 - **Reference Ceilings**: `PERSONA-BLIND CEILING` (blind), `ARCHETYPE-AWARE CEILING` (archetype parameters), and `USER-AWARE CEILING` (individual user continuation probability p_user) represent theoretical policy bounds under varying degrees of user knowledge. None are achievable baselines; all serve as reference ceilings.
 
-## 6. Findings & Observations
-- **Ambiguity Impact**: On ambiguous utterances where complete-sounding clauses have persona-sampled continuations, the Text Heuristic achieves 50.6% accuracy with 49.4% premature interruptions, matching the mock decider; no real Decider run yet.
-- **Persona Pause Dilemma**: Fixed 600ms causes 50.8% premature interruptions on slow pausers versus 0.0% on fast pausers.
-- **CPU Latency Degeneration**: At 3190 ms CPU latency, speculative queries arrive after the 2200 ms max_wait timeout, degenerating into a fixed 2200 ms timeout with 100.0% unnecessary wait.
-- **Cache & Replay Protocol**: Replay verified with 3811 cache hits and 0 cache misses (zero fallback).
-- **Profile Ablation Control**: The Per-User Text Heuristic control matches the mock profile decider on pause thresholding without neural model inference; no real Decider run yet.
+## 7. Findings & Observations
+
+*No findings text generated because evaluation was executed with MockDecider cache entries. Per evaluation rules, headline claims and findings require a cache whose provenance says real (backend, model id, GPU name).*
