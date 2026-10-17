@@ -8,7 +8,7 @@
 | B1 | Scaffold | DONE | 2026-10-17 |
 | B2 | Decider service | DONE | 2026-10-17 |
 | B3 | Events, state builder, turn manager | DONE | 2026-10-17 |
-| B4 | Reply agent | DOING | 2026-10-17 |
+| B4 | Reply agent | DONE | 2026-10-17 |
 | B5 | Baselines, dataset, eval harness | TODO | |
 | B6 | Pace profile + regret log | TODO | |
 | B7 | Confidence-aware policy | TODO | |
@@ -386,6 +386,62 @@
   - Test suite runtime: 0.81 s across 14 test cases.
   - Linting: 0 errors (`ruff check .`).
 - **Next step**: Step B4 — Reply agent.
+
+## Step B4 — PLAN
+- **Goal**: Implement `reply_agent.py` wrapping Strands Agent on Amazon Bedrock with token streaming, mock Bedrock fallback (`MOCK_BEDROCK=1`), and end-to-end integration triggered strictly on `RESPOND`.
+- **Approach**:
+  1. Inspect `strands-agents` source API for `BedrockModel` and streaming:
+     - Verified: `from strands import Agent` and `from strands.models import BedrockModel`.
+     - Streaming interface: `agent.stream_async(prompt)` yields event dicts where text delta is `event["data"]`.
+  2. Implement `backend/app/reply_agent.py`:
+     - `ReplyAgent`: accepts `AppConfig`, initializes `BedrockModel(model_id=cfg.bedrock_model_id, region_name=cfg.aws_region)` when `MOCK_BEDROCK=0` and credentials exist.
+     - When `MOCK_BEDROCK=1` (default in tests) or credentials missing: provides calibrated mock streaming (`stream_reply`) yielding text deltas asynchronously.
+     - `generate_reply(prompt: str) -> str`: non-streaming accumulator.
+     - `should_respond(action: str) -> bool`: returns True strictly if action == "RESPOND".
+  3. Integration in End-to-End Test (`backend/tests/test_reply_agent.py`):
+     - End-to-end test with MockDecider and MockBedrock:
+       - User speaks a completed thought.
+       - Pause reaches checkpoint -> Decider evaluates state -> yields `TurnYielded(action="RESPOND")`.
+       - Reply agent triggers on `RESPOND`, streams response tokens.
+       - Verify reply is NOT triggered on `WAIT`.
+  4. Real-Bedrock check:
+     - Check live AWS credentials via STS: absent (`InvalidClientTokenId`), so mark real-Bedrock check SKIPPED in NOTES.md without blocking.
+  5. Run `ruff` and `pytest`.
+- **Files expected**:
+  - `backend/app/reply_agent.py`
+  - `backend/tests/test_reply_agent.py`
+  - `NOTES.md`
+
+## Step B4 — DONE
+- **Status**: DONE
+- **What was done**:
+  1. **Strands Agents API Integration (`backend/app/reply_agent.py`)**:
+     - Verified source API from `strands-agents`: `from strands import Agent` and `from strands.models import BedrockModel`.
+     - Built `ReplyAgent` integrating with Amazon Bedrock Converse stream API via `agent.stream_async(prompt)`.
+     - Added mock fallback (`MOCK_BEDROCK=1` by default in test suite or when AWS credentials are absent).
+     - Contextual streaming responses with `stream_reply(prompt)` yielding text tokens asynchronously.
+     - Enforced strict gating via `should_respond(action)`: reply generation triggers strictly if action is `RESPOND`.
+  2. **End-to-End Pipeline Tests (`backend/tests/test_reply_agent.py`)**:
+     - Tested mock token streaming and non-streaming reply generation.
+     - Tested turn gating logic (`RESPOND` -> True; `WAIT`/`HOLD` -> False).
+     - End-to-end integration: User speaks completed statement -> silence checkpoint reaches 250 ms -> `TurnManager` queries `MockDecider` -> emits `TurnYielded(action="RESPOND")` -> `ReplyAgent` streams reply tokens matching the user utterance.
+     - Hesitation scenario: User hesitates with trailing connector -> Decider outputs `WAIT` -> `TurnManager` remains in `PAUSED` -> `ReplyAgent` is NOT triggered.
+     - Test suite: 18/18 tests passing in 0.96s; `ruff check .` clean (0 errors).
+  3. **Real-Bedrock Check**:
+     - Verified AWS STS credentials: STS call failed with `InvalidClientTokenId` (no valid AWS credentials in environment). Marked real-Bedrock check SKIPPED per Section 0.5 without blocking.
+- **Files changed**:
+  - `pyproject.toml` (added `strands-agents` and `boto3`)
+  - `backend/app/reply_agent.py`
+  - `backend/tests/test_reply_agent.py`
+  - `NOTES.md`
+- **Decisions + why**:
+  - **Graceful Mock Fallback**: When `MOCK_BEDROCK=1` or AWS credentials fail, `ReplyAgent` seamlessly switches to a contextual generator yielding streaming token deltas. This ensures complete end-to-end integration without blocking developer pair work or CI on cloud accounts.
+  - **Strict Turn Gating**: Isolating agent invocation behind `should_respond` guarantees LLM tokens and API costs are never consumed while the user is merely pausing mid-thought (`WAIT`).
+- **Measured numbers**:
+  - Test suite runtime: 0.96 s (18/18 passed).
+  - Linting: 0 errors (`ruff check .`).
+  - Real-Bedrock check: SKIPPED (no credentials).
+- **Next step**: Step B5 — Baselines, dataset, eval harness.
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
