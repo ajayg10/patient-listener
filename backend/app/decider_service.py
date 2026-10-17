@@ -162,10 +162,13 @@ class LocalDecider:
                 "Refusing to load Decider model."
             )
 
-        # 2. Ensure offline and cache environment before library imports
+        # 2. Ensure cache environment and optional offline mode before library imports
         os.environ["HF_HOME"] = self.cfg.hf_home
         os.environ["HF_HUB_DISABLE_XET"] = "1"
-        os.environ["HF_HUB_OFFLINE"] = "1"
+        if getattr(self.cfg, "hf_offline", False):
+            os.environ["HF_HUB_OFFLINE"] = "1"
+        else:
+            os.environ.pop("HF_HUB_OFFLINE", None)
 
         # 3. Configure PyTorch threads
         import torch

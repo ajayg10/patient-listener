@@ -40,8 +40,9 @@ class EnvSettings(BaseSettings):
     decider_backend: str = "mock"  # mock | local | remote
     decider_url: str = "http://localhost:8000"
     decider_model_id: str = "StrandsAgents/strands-decider-2B-hobson-v19"
-    decider_device: str = "cpu"
+    decider_device: str = "cpu"  # cpu | cuda (GPU hosts use cuda)
     decider_torch_threads: int = 6
+    hf_offline: bool = False
 
     bedrock_model_id: str = "anthropic.claude-3-haiku-20240307-v1:0"
     aws_region: str = "us-east-1"

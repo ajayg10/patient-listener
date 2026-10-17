@@ -27,6 +27,11 @@ if "HF_HOME" not in os.environ:
         os.environ["HF_HOME"] = _cfg_hf
 
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+if "HF_HUB_OFFLINE" not in os.environ:
+    from backend.app.config import get_config
+    if getattr(get_config(), "hf_offline", False):
+        os.environ["HF_HUB_OFFLINE"] = "1"
+
 if os.name == "nt" and Path("E:/tmp").exists():
     os.environ.setdefault("TEMP", "E:\\tmp")
     os.environ.setdefault("TMP", "E:\\tmp")
