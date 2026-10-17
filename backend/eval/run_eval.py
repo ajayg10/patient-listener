@@ -39,6 +39,7 @@ B0_CASES_PATH = DATA_DIR / "b0_cases.jsonl"
 B0_RESULTS_PATH = RESULTS_DIR / "b0_results.json"
 
 MEASURED_CPU_MEDIAN_MS = 3190.1  # AMD Ryzen 5 5500U from NOTES.md
+MEASURED_GPU_MEDIAN_MS = 235.6   # Tesla T4 GPU (Google Colab, 60-token warm median)
 
 
 def evaluate_fixed_baseline(turns: list[dict[str, Any]], timeout_ms: int) -> list[dict[str, Any]]:
@@ -411,6 +412,9 @@ def run_full_evaluation() -> None:
     all_runs["Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER]"] = evaluate_decider_virtual(
         turns, cache, 0.0, model_id, checkpoints, max_wait, stats
     )
+    all_runs[f"Strands Decider 2B ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4) [MOCK-DECIDER]"] = evaluate_decider_virtual(
+        turns, cache, MEASURED_GPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats
+    )
     all_runs[f"Strands Decider 2B ({MEASURED_CPU_MEDIAN_MS:.0f}ms CPU) [MOCK-DECIDER]"] = evaluate_decider_virtual(
         turns, cache, MEASURED_CPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats
     )
@@ -440,6 +444,7 @@ def run_full_evaluation() -> None:
         "Fixed 1200ms Baseline",
         "Text Heuristic Baseline (250ms, dev-tuned)",
         "Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER]",
+        f"Strands Decider 2B ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4) [MOCK-DECIDER]",
         f"Strands Decider 2B ({MEASURED_CPU_MEDIAN_MS:.0f}ms CPU) [MOCK-DECIDER]",
         "PERSONA-BLIND CEILING",
         "ORACLE-UPPER-BOUND (Persona-Aware)",
@@ -526,7 +531,21 @@ def run_full_evaluation() -> None:
         "per_persona_breakdown": persona_breakdown,
         "per_category_breakdown": category_breakdown,
         "bedrock_llm_judge": "SKIPPED" if judge_skipped else "EVALUATED",
-        "gpu_row": "not measured yet",
+        "gpu_benchmark": {
+            "device": "cuda",
+            "gpu_name": "Tesla T4",
+            "warnings": "causal_conv1d and flash-linear-attention missing (reference path)",
+            "one_question": {
+                "20_tokens_ms": {"median": 167.5, "p95": 176.0},
+                "60_tokens_ms": {"median": 235.6, "p95": 236.7},
+                "150_tokens_ms": {"median": 237.3, "p95": 238.5},
+            },
+            "two_questions": {
+                "20_tokens_ms": {"median": 343.1, "p95": 343.7},
+                "60_tokens_ms": {"median": 395.2, "p95": 400.3},
+                "150_tokens_ms": {"median": 395.8, "p95": 401.1},
+            },
+        },
         "b0_validation_subset": b0_results,
     }
 
@@ -586,9 +605,6 @@ def run_full_evaluation() -> None:
     # Bedrock Judge row
     md_lines.append("| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (no AWS credentials) |")
 
-    # GPU Placeholder row
-    md_lines.append("| Strands Decider 2B (GPU) | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet | not measured yet |")
-
     # Section 2: Per-Persona Breakdown
     md_lines.extend([
         "",
@@ -626,10 +642,22 @@ def run_full_evaluation() -> None:
             f"{i_cat['premature_rate']*100:.1f}% | {a_cat['accuracy']*100:.1f}% | {a_cat['premature_rate']*100:.1f}% |"
         )
 
-    # Section 4: B0 40-case validation
+    # Section 4: Hardware Latency Benchmarks & B0 validation
     md_lines.extend([
         "",
-        "## 4. Decider B0 40-Case Small Validation Set",
+        "## 4. Decider Hardware Latency Benchmarks & B0 Validation Set",
+        "",
+        "### Measured Decider Latency on GPU (Tesla T4, Google Colab)",
+        "- **Device**: `cuda` (GPU: Tesla T4, real model weights)",
+        "- **Warnings**: `causal_conv1d` and `flash-linear-attention` missing (reference path execution)",
+        "",
+        "| State Tokens | 1 Question Median (ms) | 1 Question P95 (ms) | 2 Questions Median (ms) | 2 Questions P95 (ms) | 2Q Overhead (ms) |",
+        "|---|---|---|---|---|---|",
+        "| 20 tokens | 167.5 | 176.0 | 343.1 | 343.7 | +175.6 |",
+        "| 60 tokens | 235.6 | 236.7 | 395.2 | 400.3 | +159.6 |",
+        "| 150 tokens | 237.3 | 238.5 | 395.8 | 401.1 | +158.5 |",
+        "",
+        "### Decider B0 40-Case Small Validation Set",
         f"- Number of cases: {b0_results['num_cases']}",
         f"- Fixed 800ms Baseline Accuracy: {b0_results['fixed_800ms_accuracy']*100:.1f}% ({b0_results['fixed_800ms_correct']}/{b0_results['num_cases']})",
         f"- Strands Decider 2B (Real Weights): {b0_results['real_model_accuracy']*100:.1f}% ({b0_results['real_model_correct']}/{b0_results['num_cases']}) [backend: {b0_results['real_model_backend']}]",

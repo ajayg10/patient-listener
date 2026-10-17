@@ -23,6 +23,9 @@ Step-by-step instructions for executing Decider 2B inference on a remote GPU env
 
 ### Step 3: Install Dependencies
 ```bash
+# In Colab, uninstall pre-installed torchao first to avoid version conflict (peft requires >= 0.16.0)
+!pip uninstall -y torchao
+
 # Install PyTorch with CUDA support and Strands Decider
 !pip install --upgrade pip
 !pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121

@@ -299,12 +299,13 @@
   | 60 tokens | 3424.5 | 3470.9 | 5852.7 | 5886.5 | +2428.3 |
   | 150 tokens | 3336.9 | 3440.8 | 6095.3 | 6571.0 | +2758.4 |
 
-  ### Empty Table Template for GPU Results (e.g. Colab / Kaggle)
+  ### GPU Benchmark Results Table (Measured on GPU: Tesla T4, Google Colab, device cuda, real Decider)
+  - Warnings in that run: `causal_conv1d` and `flash-linear-attention` missing (ran on reference path).
   | State Tokens | 1 Question Median (ms) | 1 Question P95 (ms) | 2 Questions Median (ms) | 2 Questions P95 (ms) | 2Q Overhead (ms) |
   |---|---|---|---|---|---|
-  | 20 tokens | — | — | — | — | — |
-  | 60 tokens | — | — | — | — | — |
-  | 150 tokens | — | — | — | — | — |
+  | 20 tokens | 167.5 | 176.0 | 343.1 | 343.7 | +175.6 |
+  | 60 tokens | 235.6 | 236.7 | 395.2 | 400.3 | +159.6 |
+  | 150 tokens | 237.3 | 238.5 | 395.8 | 401.1 | +158.5 |
 
   - **Batching finding (CPU)**: 2-question call costs about 1.7 to 1.9x the 1-question call on this CPU (2968 vs 5526 ms at 20 tok, 3337 vs 6095 ms at 150 tok, free RAM 7.7 GB). So no batching gain on CPU. Live decision = Q1 only; Q2 is for offline ablation. Do not claim a batching benefit unless a GPU row shows one.
   - Test suite runtime: 0.68 s (9/9 passed).
@@ -905,7 +906,15 @@
 
 - **Pattern Check & Integration**:
   - Confirmed that `example.py` and `patient_listener_pattern/tests/test_pattern.py` use the **real** `strands.Agent` class from `strands-agents` with `MockStrandsModel(Model)` and `Agent(interventions=[handler])`.
-  - Integration test `test_agent_integration_with_handler` exercises one WAIT turn (model execution suppressed, `DENIED:`) and one RESPOND turn (model executes, output asserted) running 100% offline with zero network and zero AWS credentials. All 37 tests pass.
+  - Integration test `test_agent_integration_with_handler` exercises one WAIT turn (model execution suppressed, `DENIED:`) and one RESPOND turn (model executes, output asserted) running 100% offline with zero network and zero AWS credentials. All 38 tests pass.
+
+- **First Real GPU Benchmark (Tesla T4, Google Colab)**:
+  - Measured with real Decider weights on `device=cuda`, GPU: Tesla T4.
+  - Warnings during run: `causal_conv1d` and `flash-linear-attention` missing (executed via reference path).
+  - 1Q (turn_complete): 20 tok = 167.5/176.0 ms, 60 tok = 235.6/236.7 ms, 150 tok = 237.3/238.5 ms.
+  - 2Q (turn_complete + mid_thought): 20 tok = 343.1/343.7 ms, 60 tok = 395.2/400.3 ms, 150 tok = 395.8/401.1 ms.
+  - 2Q overhead: ~159-176 ms on GPU vs ~2500 ms on CPU.
+  - Replayed test split at measured GPU median latency (235.6 ms): accuracy 75.6% [Cluster CI: 63.0%, 88.0%; Wilson: 70.7%, 80.0%], premature interruption rate 24.4%, response delay P50 = 486 ms, unnecessary wait = 0.0%. Replay row labeled `Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER]` in `results.md` (decision contents derived from mock cache).
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
@@ -924,5 +933,7 @@
 - Memory guard: never load the real model inside pytest. Real-model runs happen only in explicit scripts, one process at a time, after checking free RAM is at least 2 GB; otherwise stop and report.
 - C: drive has 4.31 GB free; all Hugging Face caches (`HF_HOME`) and virtual environments must strictly remain on drive E:.
 - With CPU decisions at about 3 s and max_wait 2200 ms, a live CPU run degenerates into a fixed 2.2 s timeout. Live demos need a GPU host.
+- Colab dependency conflict: Colab pre-installs `torchao` which conflicts with `peft` (requires `>= 0.16.0`). Must execute `!pip uninstall -y torchao` before installing `strands-decider`.
+- HF cache path portability: `HF_HOME` must be read from environment or config without hardcoding Windows drive letters (`E:\hf-cache`) so scripts run portably across Windows and Linux/Colab.
 - AWS credentials: `aws` CLI is not installed; shell environment variables `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc. are UNSET. `~/.aws/credentials` exists on the host filesystem (from prior Amazon Q/CLI usage) containing expired or inactive tokens, producing `InvalidClientTokenId` when boto3 attempts to authenticate with AWS STS. Neither `.env` nor `.env.example` contained placeholder keys. Config cleanly skips AWS vars when unset; Bedrock calls remain in `MOCK_BEDROCK=1` mode.
 - Dataset diversity: template text with small vocabulary (60 unique utterance templates across dev and test), no Bedrock-generated text; evaluations measure timing and prompt structure over synthetic templates, not natural acoustic variety.
