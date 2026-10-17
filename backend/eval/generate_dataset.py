@@ -218,17 +218,16 @@ def generate_scenario_turn(
         syntactically_complete = False
     elif turn_category == "ambiguous":
         # Ambiguous: syntactically complete text, but ground truth continuation is sampled
-        # per persona continuation probability (fast: 30%, slow: 50%, filler: 65%)
+        # per persona continuation probability modulated by per-user pause jitter
         raw_text = random.choice(template["ambiguous_utterances"])
         text = raw_text if raw_text.endswith((".", "?", "!")) else f"{raw_text}."
         syntactically_complete = True
 
-        cont_prob = persona_info.get("continuation_prob", 0.40)
-        # If true, speaker is pausing mid-thought to continue speaking later
-        if random.random() < cont_prob:
-            is_turn_complete = False
-        else:
-            is_turn_complete = True
+        base_cont_prob = persona_info.get("continuation_prob", 0.40)
+        # Per-user pause jitter shifts continuation probability: slower/hesitant users continue more often
+        user_cont_prob = max(0.05, min(0.95, base_cont_prob + (jitter / 200.0)))
+
+        is_turn_complete = (random.random() >= user_cont_prob)
     else:
         raise ValueError(f"Unknown turn category: {turn_category}")
 
@@ -337,12 +336,17 @@ def generate_dataset() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list
                 dev_turns.append(turn)
 
     # 3. Generate Test Turns (9 test users x 6 test templates x 6 turns = 324 turns)
+    # 50% ambiguous (162 turns), 25% complete (81 turns), 25% incomplete (81 turns)
     test_turns: list[dict[str, Any]] = []
     turn_idx = 0
-    test_categories = ["complete", "complete", "incomplete", "incomplete", "ambiguous", "ambiguous"]
 
     for u in test_users:
-        for tmpl in TEST_TEMPLATES:
+        for tmpl_idx, tmpl in enumerate(TEST_TEMPLATES):
+            # Alternating distribution across templates yields exactly 81 complete, 81 incomplete, 162 ambiguous
+            if tmpl_idx % 2 == 0:
+                test_categories = ["complete", "complete", "incomplete", "ambiguous", "ambiguous", "ambiguous"]
+            else:
+                test_categories = ["complete", "incomplete", "incomplete", "ambiguous", "ambiguous", "ambiguous"]
             for cat in test_categories:
                 turn_idx += 1
                 turn = generate_scenario_turn(u, u["persona"], tmpl, cat, turn_idx)
