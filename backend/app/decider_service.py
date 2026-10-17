@@ -133,6 +133,13 @@ class MockDecider:
                 if silence_ms is not None and silence_ms < 900:
                     return True
 
+        # Check pace profile resume threshold if present
+        pace_match = re.search(r"resume_p50=(\d+)ms", clean)
+        if pace_match and silence_ms is not None:
+            user_resume = int(pace_match.group(1))
+            if silence_ms < user_resume:
+                return True
+
         # Completed sentence with final punctuation and sufficient pause
         if speech.endswith((".", "?", "!")):
             return False

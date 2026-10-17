@@ -30,7 +30,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from backend.app.config import get_config
-from backend.eval.baselines import FixedTimeoutBaseline, LLMJudgeBaseline, TextHeuristicBaseline
+from backend.app.pace_profile import PaceProfileBuilder
+from backend.app.state_builder import StateBuilder
+from backend.eval.baselines import (
+    FixedTimeoutBaseline,
+    LLMJudgeBaseline,
+    PerUserTextHeuristicBaseline,
+    TextHeuristicBaseline,
+)
 from backend.eval.metrics import (
     EvalSummary,
     cluster_bootstrap_paired_difference_ci,
@@ -110,6 +117,42 @@ def evaluate_text_heuristic_baseline(turns: list[dict[str, Any]], threshold_ms: 
             "turn_end_t": turn_end_t,
             "action_timestamp_ms": action_t,
             "is_turn_complete": is_complete,
+            "decision_latency_ms": 0.0,
+        })
+    return records
+
+
+def evaluate_per_user_text_heuristic_baseline(
+    turns: list[dict[str, Any]],
+    profiles: dict[str, Any],
+    default_threshold_ms: int = 250,
+) -> list[dict[str, Any]]:
+    """Evaluate text heuristic with per-user pause threshold from pace profile (no model)."""
+    baseline = PerUserTextHeuristicBaseline(profiles_by_user=profiles, default_threshold_ms=default_threshold_ms)
+    records = []
+    for t in turns:
+        speech_end_t = t["speech_end_t"]
+        turn_end_t = t["turn_end_t"]
+        silence_ms = t["silence_ms"]
+        text = t["text"]
+        user_id = t.get("user_id", "")
+        pred_action = baseline.decide(text, silence_ms, user_id=user_id)
+        user_thresh = baseline.get_user_threshold(user_id)
+        if pred_action == "RESPOND":
+            action_t = speech_end_t + user_thresh
+        else:
+            action_t = speech_end_t + silence_ms
+        records.append({
+            "id": t["id"],
+            "user_id": user_id,
+            "persona_id": t.get("persona_id"),
+            "archetype": t.get("archetype"),
+            "category": t.get("category"),
+            "ground_truth": t["ground_truth"],
+            "predicted_action": pred_action,
+            "turn_end_t": turn_end_t,
+            "action_timestamp_ms": action_t,
+            "is_turn_complete": t["is_turn_complete"],
             "decision_latency_ms": 0.0,
         })
     return records
@@ -299,6 +342,8 @@ def evaluate_decider_virtual(
     checkpoints: list[int],
     max_wait_ms: int,
     stats: dict[str, int],
+    use_profile: bool = False,
+    pace_builder: PaceProfileBuilder | None = None,
 ) -> list[dict[str, Any]]:
     """Simulate speculative decider queries on a virtual clock matching TurnManager logic.
 
@@ -330,7 +375,13 @@ def evaluate_decider_virtual(
             # Dispatch decision if no decision currently in flight
             if in_flight_arrival_silence is None:
                 speech_text = " ".join(t["text"].split()[-40:])
-                state_text = f'Speaker: "{speech_text}"\n[Silence: {cp} ms]'
+                pace_line = None
+                if use_profile and pace_builder:
+                    prof = pace_builder.build_profile(t.get("user_id", ""))
+                    pace_line = prof.render()
+                sb = StateBuilder()
+                sb.append_transcript(speech_text)
+                state_text = sb.build_state_text(silence_ms=cp, pace_summary=pace_line)
                 key = compute_cache_key(model_id, "turn_complete", state_text)
 
                 if key not in cache:
@@ -551,27 +602,36 @@ def run_full_evaluation() -> None:
     # Track record lists for breakdown tables
     all_runs: dict[str, list[dict[str, Any]]] = {}
 
+    pace_builder = PaceProfileBuilder()
+    profiles_map = {t["user_id"]: pace_builder.build_profile(t["user_id"]) for t in turns}
+
     # 1. Baselines
     for timeout in [600, 800, 1200]:
         recs = evaluate_fixed_baseline(turns, timeout)
         all_runs[f"Fixed {timeout}ms Baseline"] = recs
 
     all_runs["Text Heuristic Baseline (250ms, dev-tuned)"] = evaluate_text_heuristic_baseline(turns, threshold_ms=250)
+    all_runs["Per-User Text Heuristic (Profile Threshold, No Model)"] = evaluate_per_user_text_heuristic_baseline(
+        turns, profiles_map, default_threshold_ms=250
+    )
 
     # 2. Virtual Decider
     all_runs["Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER]"] = evaluate_decider_virtual(
-        turns, cache, 0.0, model_id, checkpoints, max_wait, stats
+        turns, cache, 0.0, model_id, checkpoints, max_wait, stats, use_profile=False
     )
     all_runs[f"Strands Decider 2B ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4) [MOCK-DECIDER]"] = evaluate_decider_virtual(
-        turns, cache, MEASURED_GPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats
+        turns, cache, MEASURED_GPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats, use_profile=False
+    )
+    all_runs[f"Strands Decider 2B + Profile ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4) [MOCK-DECIDER]"] = evaluate_decider_virtual(
+        turns, cache, MEASURED_GPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats, use_profile=True, pace_builder=pace_builder
     )
     all_runs[f"Strands Decider 2B ({MEASURED_CPU_MEDIAN_MS:.0f}ms CPU) [MOCK-DECIDER]"] = evaluate_decider_virtual(
-        turns, cache, MEASURED_CPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats
+        turns, cache, MEASURED_CPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats, use_profile=False
     )
 
     for p_lat in [100.0, 300.0, 1000.0, 3000.0]:
         all_runs[f"Decider Sweep ({p_lat:.0f}ms Sweep) [MOCK-DECIDER]"] = evaluate_decider_virtual(
-            turns, cache, p_lat, model_id, checkpoints, max_wait, stats
+            turns, cache, p_lat, model_id, checkpoints, max_wait, stats, use_profile=False
         )
 
     # 3. Reference Ceilings
@@ -614,8 +674,10 @@ def run_full_evaluation() -> None:
         "Fixed 800ms Baseline",
         "Fixed 1200ms Baseline",
         "Text Heuristic Baseline (250ms, dev-tuned)",
+        "Per-User Text Heuristic (Profile Threshold, No Model)",
         "Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER]",
         f"Strands Decider 2B ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4) [MOCK-DECIDER]",
+        f"Strands Decider 2B + Profile ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4) [MOCK-DECIDER]",
         f"Strands Decider 2B ({MEASURED_CPU_MEDIAN_MS:.0f}ms CPU) [MOCK-DECIDER]",
         "PERSONA-BLIND CEILING",
         "ARCHETYPE-AWARE CEILING",
@@ -796,6 +858,8 @@ def run_full_evaluation() -> None:
 
         if "Fixed" in s.name:
             cond = "Fixed"
+        elif "Per-User Text Heuristic" in s.name:
+            cond = "profile threshold (no model)"
         elif "Heuristic" in s.name:
             cond = "dev-tuned"
         elif "PERSONA-BLIND" in s.name:
@@ -806,6 +870,8 @@ def run_full_evaluation() -> None:
             cond = "Reference ceiling (user-aware)"
         elif "ORACLE" in s.name:
             cond = "Reference ceiling (persona-aware)"
+        elif "Profile" in s.name:
+            cond = "mock cache + profile, virtual clock"
         elif "Sweep" in s.name:
             cond = "mock cache, virtual clock"
         else:
@@ -902,6 +968,7 @@ def run_full_evaluation() -> None:
         f"- **Persona Pause Dilemma**: Fixed 600ms causes {persona_breakdown['Fixed 600ms Baseline']['slow_pauser']['premature_rate']*100:.1f}% premature interruptions on slow pausers versus {persona_breakdown['Fixed 600ms Baseline']['fast_pauser']['premature_rate']*100:.1f}% on fast pausers.",
         f"- **CPU Latency Degeneration**: At {MEASURED_CPU_MEDIAN_MS:.0f} ms CPU latency, speculative queries arrive after the 2200 ms max_wait timeout, degenerating into a fixed 2200 ms timeout with 100.0% unnecessary wait.",
         f"- **Cache & Replay Protocol**: Replay verified with {stats['cache_hits']} cache hits and {stats['cache_misses']} cache misses (zero fallback).",
+        "- **Profile Ablation Control**: The Per-User Text Heuristic control matches the mock profile decider on pause thresholding without neural model inference; no real Decider run yet.",
     ])
 
     import re

@@ -69,6 +69,40 @@ class TextHeuristicBaseline:
         return "RESPOND" if silence_ms >= self.threshold_ms else "WAIT"
 
 
+class PerUserTextHeuristicBaseline(TextHeuristicBaseline):
+    """Text heuristic baseline with per-user pause threshold taken from pace profile (no model).
+
+    Control condition: applies user-specific pause threshold (resumed_p50) from that user's profile
+    without any neural model inference.
+    """
+
+    def __init__(
+        self,
+        profiles_by_user: dict[str, Any] | None = None,
+        default_threshold_ms: int = 250,
+    ) -> None:
+        super().__init__(threshold_ms=default_threshold_ms)
+        self.profiles = profiles_by_user or {}
+        self.default_threshold_ms = default_threshold_ms
+        self.name = "Per-User Text Heuristic (Profile Threshold, No Model)"
+
+    def get_user_threshold(self, user_id: str) -> float:
+        prof = self.profiles.get(user_id)
+        if not prof:
+            return float(self.default_threshold_ms)
+        r_med = getattr(prof, "resumed_median_ms", None)
+        if r_med is None and isinstance(prof, dict):
+            r_med = prof.get("resumed_median_ms")
+        if r_med is not None and float(r_med) > 0:
+            return float(r_med)
+        return float(self.default_threshold_ms)
+
+    def decide(self, text: str, silence_ms: float, user_id: str = "") -> str:
+        if self.is_incomplete(text):
+            return "WAIT"
+        user_thresh = self.get_user_threshold(user_id)
+        return "RESPOND" if silence_ms >= user_thresh else "WAIT"
+
 
 class LLMJudgeBaseline:
     """LLM Judge baseline using Amazon Bedrock Converse API with Claude 3 Haiku.

@@ -1,7 +1,7 @@
 # Benchmark Results — Patient Listener
 
 > [!WARNING]
-> **PROVENANCE & MOCK NOTICE**: All Decider rows below were generated using `MockDecider` cache entries (`backend=mock`, 448 keys, compute time 0.00 ms). They are marked `[MOCK-DECIDER]` and must NOT be cited as measured performance of the real weights. On ambiguous turns, the text heuristic baseline achieves matching accuracy to the mock decider; no real Decider run yet.
+> **PROVENANCE & MOCK NOTICE**: All Decider rows below were generated using `MockDecider` cache entries (`backend=mock`, 8558 keys, compute time 0.00 ms). They are marked `[MOCK-DECIDER]` and must NOT be cited as measured performance of the real weights. On ambiguous turns, the text heuristic baseline achieves matching accuracy to the mock decider; no real Decider run yet.
 
 > [!IMPORTANT]
 > **SYNTHETIC BENCHMARK**: Evaluated on 360 synthetic test turns (181 complete, 179 incomplete) across 30 users (12 turns/user) in 3 conflicting persona archetypes (fast, slow, filler-heavy). Zero leakage: dev and test splits strictly partition users and templates.
@@ -26,8 +26,10 @@
 | Fixed 800ms Baseline | 64.4% [56.9%, 71.4%] | [59.4%, 69.2%] | 18.9% [11.9%, 26.1%] | [15.2%, 23.2%] | 33.1% [17.5%, 50.3%] | [26.7%, 40.3%] | 800 ms [800.0, 800.0] ms | 800 ms | Fixed |
 | Fixed 1200ms Baseline | 70.6% [60.0%, 80.0%] | [65.6%, 75.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 1010 ms [910.0, 1182.0] ms | 1200 ms | Fixed |
 | Text Heuristic Baseline (250ms, dev-tuned) | 75.3% [70.0%, 80.6%] | [70.6%, 79.5%] | 24.7% [19.4%, 30.0%] | [20.5%, 29.4%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 250 ms [250.0, 250.0] ms | 250 ms | dev-tuned |
+| Per-User Text Heuristic (Profile Threshold, No Model) | 86.9% [82.2%, 91.1%] | [83.1%, 90.0%] | 12.8% [8.6%, 17.5%] | [9.7%, 16.6%] | 32.6% [15.5%, 50.0%] | [26.2%, 39.7%] | 707 ms [661.0, 766.0] ms | 928 ms | profile threshold (no model) |
 | Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 75.3% [70.0%, 80.6%] | [70.6%, 79.5%] | 24.7% [19.4%, 30.0%] | [20.5%, 29.4%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 250 ms [250.0, 250.0] ms | 250 ms | mock cache, virtual clock |
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 80.3% [73.6%, 86.9%] | [75.9%, 84.1%] | 19.7% [13.1%, 26.4%] | [15.9%, 24.1%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 486 ms [485.6, 485.6] ms | 486 ms | mock cache, virtual clock |
+| Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 99.7% [98.9%, 100.0%] | [98.4%, 100.0%] | 0.3% [0.0%, 1.1%] | [0.1%, 1.6%] | 60.2% [41.1%, 78.5%] | [52.9%, 67.1%] | 1036 ms [1035.6, 1035.6] ms | 1436 ms | mock cache + profile, virtual clock |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | mock cache, virtual clock |
 | Decider Sweep (100ms Sweep) [MOCK-DECIDER] | 76.9% [71.1%, 83.1%] | [72.3%, 81.0%] | 23.1% [16.9%, 28.9%] | [19.0%, 27.7%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 350 ms [350.0, 350.0] ms | 350 ms | mock cache, virtual clock |
 | Decider Sweep (300ms Sweep) [MOCK-DECIDER] | 81.4% [75.0%, 87.8%] | [77.0%, 85.1%] | 18.6% [12.2%, 25.0%] | [14.9%, 23.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 550 ms [550.0, 550.0] ms | 550 ms | mock cache, virtual clock |
@@ -55,8 +57,10 @@
 | Fixed 800ms Baseline | 0.0% | 695 ms | 34.2% | 800 ms | 22.5% | 800 ms |
 | Fixed 1200ms Baseline | 0.0% | 695 ms | 0.0% | 1200 ms | 0.0% | 1098 ms |
 | Text Heuristic Baseline (250ms, dev-tuned) | 15.0% | 250 ms | 25.8% | 250 ms | 33.3% | 250 ms |
+| Per-User Text Heuristic (Profile Threshold, No Model) | 8.3% | 343 ms | 12.5% | 884 ms | 17.5% | 716 ms |
 | Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 15.0% | 250 ms | 25.8% | 250 ms | 33.3% | 250 ms |
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 486 ms | 25.8% | 486 ms | 33.3% | 486 ms |
+| Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 736 ms | 0.0% | 1436 ms | 0.8% | 1036 ms |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
 | PERSONA-BLIND CEILING | 0.0% | 2200 ms | 0.0% | 250 ms | 0.0% | 250 ms |
 | ARCHETYPE-AWARE CEILING | 15.0% | 250 ms | 0.0% | 250 ms | 0.0% | 250 ms |
@@ -71,8 +75,10 @@
 | Fixed 800ms Baseline | 73.3% | 800 ms | 31.1% | 57.8% | 22.2% |
 | Fixed 1200ms Baseline | 43.3% | 1078 ms | 0.0% | 69.4% | 0.0% |
 | Text Heuristic Baseline (250ms, dev-tuned) | 100.0% | 250 ms | 0.0% | 50.6% | 49.4% |
+| Per-User Text Heuristic (Profile Threshold, No Model) | 100.0% | 738 ms | 0.0% | 73.9% | 25.6% |
 | Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 100.0% | 250 ms | 0.0% | 50.6% | 49.4% |
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 486 ms | 0.0% | 60.6% | 39.4% |
+| Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 1036 ms | 0.0% | 99.4% | 0.6% |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
 | PERSONA-BLIND CEILING | 100.0% | 250 ms | 0.0% | 49.4% | 0.0% |
 | ARCHETYPE-AWARE CEILING | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
@@ -109,4 +115,5 @@
 - **Ambiguity Impact**: On ambiguous utterances where complete-sounding clauses have persona-sampled continuations, the Text Heuristic achieves 50.6% accuracy with 49.4% premature interruptions, matching the mock decider; no real Decider run yet.
 - **Persona Pause Dilemma**: Fixed 600ms causes 50.8% premature interruptions on slow pausers versus 0.0% on fast pausers.
 - **CPU Latency Degeneration**: At 3190 ms CPU latency, speculative queries arrive after the 2200 ms max_wait timeout, degenerating into a fixed 2200 ms timeout with 100.0% unnecessary wait.
-- **Cache & Replay Protocol**: Replay verified with 2904 cache hits and 0 cache misses (zero fallback).
+- **Cache & Replay Protocol**: Replay verified with 3811 cache hits and 0 cache misses (zero fallback).
+- **Profile Ablation Control**: The Per-User Text Heuristic control matches the mock profile decider on pause thresholding without neural model inference; no real Decider run yet.
