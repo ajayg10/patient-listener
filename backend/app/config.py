@@ -56,6 +56,11 @@ class EnvSettings(BaseSettings):
     )
     regret_db_path: str = "backend/app/data/regrets.db"
     config_path: str = "config.yaml"
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"])
+    fixed_replay_timeout_ms: int = 800
+    replay_decision_latency_ms: float = 235.6
+    decision_cache_path: str = "backend/eval/data/decisions_cache.jsonl"
+    demo_scenarios_path: str = "backend/eval/data/demo_scenarios.json"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -136,6 +141,26 @@ class AppConfig(BaseModel):
     @regret_db_path.setter
     def regret_db_path(self, val: str) -> None:
         self.env.regret_db_path = val
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return self.env.cors_origins
+
+    @property
+    def fixed_replay_timeout_ms(self) -> int:
+        return self.env.fixed_replay_timeout_ms
+
+    @property
+    def replay_decision_latency_ms(self) -> float:
+        return self.env.replay_decision_latency_ms
+
+    @property
+    def decision_cache_path(self) -> str:
+        return self.env.decision_cache_path
+
+    @property
+    def demo_scenarios_path(self) -> str:
+        return self.env.demo_scenarios_path
 
 
 def load_config(config_yaml_path: str | Path | None = None) -> AppConfig:

@@ -38,6 +38,7 @@ class TurnManager:
         cfg: TurnManagerConfig | None = None,
         policy_thresholds: PolicyThresholds | None = None,
         question: ChoiceQuestion | None = None,
+        pace_summary: str | None = None,
         on_event: Callable[[TurnEvent], None] | None = None,
     ) -> None:
         app_cfg: AppConfig = get_config()
@@ -47,6 +48,7 @@ class TurnManager:
         self.clock = clock or SystemClock()
         self.state_builder = state_builder or StateBuilder()
         self.question = question or TURN_COMPLETE_QUESTION
+        self.pace_summary = pace_summary
         self.on_event_cb = on_event
 
         # Checkpoints in ascending order
@@ -195,7 +197,10 @@ class TurnManager:
 
         self._emit(DecisionRequested(checkpoint_ms=checkpoint_ms, generation=gen, timestamp_ms=now))
 
-        state_text = self.state_builder.build_state_text(silence_ms=silence_ms)
+        state_text = self.state_builder.build_state_text(
+            silence_ms=silence_ms,
+            pace_summary=self.pace_summary,
+        )
 
         # In VirtualClock mode with simulated latency, schedule future delivery
         if isinstance(self.clock, VirtualClock) and self.clock.simulated_decision_latency_ms > 0:

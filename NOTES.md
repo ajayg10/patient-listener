@@ -12,11 +12,11 @@
 | B5 | Baselines, dataset, eval harness | DONE | 2026-10-17 |
 | B5.5 | Audit & honesty check | DONE | 2026-10-17 |
 | B5.8 | Reconcile counts, cluster bootstrap & personalization effect | DONE | 2026-10-18 |
-| B5.9 | Independent units, learnable profile, ceilings & enumeration | DOING | 2026-10-18 |
-| B6 | Pace profile + regret log | TODO | |
-| B7 | Confidence-aware policy | TODO | |
+| B5.9 | Independent units, learnable profile, ceilings & enumeration | DONE | 2026-10-18 |
+| B6 | Pace profile + regret log | DONE | 2026-10-18 |
+| B7 | Confidence-aware policy | DONE | 2026-10-18 |
 | B8 | Reusable pattern package | DONE | 2026-10-17 |
-| B9 | API | TODO | |
+| B9 | API | DOING | 2026-10-18 |
 | F1 | Frontend scaffold + WS client | TODO | |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | TODO | |
@@ -1113,6 +1113,47 @@
   - Repo test suite: 52/52 passing. Ruff check: clean (0 errors).
 
 
+## Step B9 — PLAN
+- **Goal**: Implement FastAPI backend application exposing WebSocket turn-taking session, regret logging, pace profile retrieval, scenario catalog, side-by-side replay SSE stream, benchmark results, and health checks.
+- **Approach**:
+  1. `backend/app/config.py`:
+     - Add `cors_origins`, `fixed_replay_timeout_ms` (800ms default), `replay_decision_latency_ms` (235.6ms default), and `decision_cache_path`.
+  2. `backend/app/main.py`:
+     - Create FastAPI application with CORS middleware.
+     - `WS /ws/session`:
+       * Accepts client events matching `events.py` schemas (`SpeechStarted`, `SpeechDelta`, `SpeechEnded`, `tick`).
+       * Manages live `TurnManager` and `ReplyAgent`.
+       * Emits decision events (`probs`, `p_done`, `latency_ms`, `action`, `checkpoint`).
+       * On `RESPOND`, streams reply tokens from `reply_agent`. If Bedrock call fails, falls back to calibrated mock reply and sets `reply_source: "mock"` (or `"bedrock"` if live).
+     - `POST /regret`:
+       * Validates payload (`user_id`, `session_id`, `state_text`, `probs`, `silence_ms`, `action`).
+       * Logs to SQLite using `backend/app/regret_log.py`.
+     - `GET /profile/{user}`:
+       * Builds and returns `PaceProfile` JSON via `PaceProfileBuilder`.
+     - `GET /scenarios`:
+       * Returns scenario metadata list (`id`, `user_id`, `persona_id`, `archetype`, `text_preview`, `true_end_time_ms`, `category`, `silence_ms`, `is_turn_complete`).
+     - `POST /replay/{scenario}`:
+       * Streams the scripted scenario through TWO engines in parallel:
+         - Fixed timeout engine (default 800 ms from config).
+         - Patient Listener engine (using active decision cache with simulated latency 235.6 ms).
+       * Emits SSE stream (`text/event-stream`) labeled with cache provenance and `"latency measured on Tesla T4, decisions from cache"`.
+       * Accepts `speed` query parameter (1.0 for real-time demo, large values for tests).
+       * Raises clear error event upon cache miss (zero fallback).
+       * Emits final events per engine: `interrupted` (bool) and `response_delay_ms`.
+     - `GET /results`:
+       * Returns `eval_results.json` content plus provenance flag.
+     - `GET /health`:
+       * Returns backend status, cache provenance, cache key count, and Bedrock status (`ValidationException: Operation not allowed`).
+  3. `scripts/pick_demo_scenarios.py`:
+     - Evaluates test scenarios against active cache; selects cases where fixed timeout interrupts and Patient Listener waits then responds.
+     - Saves picks to `backend/app/data/demo_scenarios.json` with provenance.
+     - Emits warning if evaluated against mock cache.
+  4. Integration tests in `backend/tests/test_api.py`:
+     - Test scripted WS session.
+     - Test regret logging and profile shift.
+     - Test replay stream with both engines at high speed.
+     - Test cache miss error event.
+     - Test reply agent fallback flag.
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
