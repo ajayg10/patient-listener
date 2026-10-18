@@ -1,0 +1,102 @@
+{
+  "provenance": {
+    "backend": "mock",
+    "model_id": "StrandsAgents/strands-decider-2B-hobson-v19",
+    "total_cached_keys": 448,
+    "is_mock": true,
+    "warning": "NOT valid for demo (mock cache)",
+    "note": "latency measured on Tesla T4, decisions from cache"
+  },
+  "scenarios": [
+    {
+      "id": "turn_user_slow_test_01_tmpl_test_01_121",
+      "user": "user_slow_test_01",
+      "persona": "slow_pauser",
+      "text_preview": "I looked at my work calendar for Tuesday morning, but Tuesday afternoon would work much better for my schedule.",
+      "true_end_time": 7524.0,
+      "silence_ms": 874.0,
+      "category": "incomplete"
+    },
+    {
+      "id": "turn_user_slow_test_01_tmpl_test_02_122",
+      "user": "user_slow_test_01",
+      "persona": "slow_pauser",
+      "text_preview": "I handed my new insurance card to the receptionist, but I need to understand what portion of the charge I owe.",
+      "true_end_time": 8235.0,
+      "silence_ms": 885.0,
+      "category": "incomplete"
+    },
+    {
+      "id": "turn_user_slow_test_01_tmpl_test_05_125",
+      "user": "user_slow_test_01",
+      "persona": "slow_pauser",
+      "text_preview": "Requesting immunization medical records copy I need to verify the clinic faxed the paperwork.",
+      "true_end_time": 5793.0,
+      "silence_ms": 893.0,
+      "category": "ambiguous"
+    },
+    {
+      "id": "turn_user_slow_test_01_tmpl_test_04_130",
+      "user": "user_slow_test_01",
+      "persona": "slow_pauser",
+      "text_preview": "Referral to cardiology department I haven't received any confirmation call from their office.",
+      "true_end_time": 5397.0,
+      "silence_ms": 847.0,
+      "category": "ambiguous"
+    },
+    {
+      "id": "turn_user_slow_test_02_tmpl_test_01_139",
+      "user": "user_slow_test_02",
+      "persona": "slow_pauser",
+      "text_preview": "Dr. Evans said I should return in six weeks, and Tuesday afternoon would work much better for my schedule.",
+      "true_end_time": 7479.0,
+      "silence_ms": 829.0,
+      "category": "incomplete"
+    },
+    {
+      "id": "turn_user_slow_test_02_tmpl_test_02_140",
+      "user": "user_slow_test_02",
+      "persona": "slow_pauser",
+      "text_preview": "Checking my insurance copay balance I need to understand what portion of the charge I owe.",
+      "true_end_time": 6595.0,
+      "silence_ms": 995.0,
+      "category": "ambiguous"
+    },
+    {
+      "id": "turn_user_slow_test_02_tmpl_test_04_142",
+      "user": "user_slow_test_02",
+      "persona": "slow_pauser",
+      "text_preview": "Referral to cardiology department I haven't received any confirmation call from their office.",
+      "true_end_time": 5453.0,
+      "silence_ms": 903.0,
+      "category": "ambiguous"
+    },
+    {
+      "id": "turn_user_slow_test_03_tmpl_test_03_147",
+      "user": "user_slow_test_03",
+      "persona": "slow_pauser",
+      "text_preview": "I already paid fifty dollars at the time of service, and the billing statement listed an unexpected facility fee.",
+      "true_end_time": 7504.0,
+      "silence_ms": 854.0,
+      "category": "incomplete"
+    },
+    {
+      "id": "turn_user_slow_test_03_tmpl_test_05_149",
+      "user": "user_slow_test_03",
+      "persona": "slow_pauser",
+      "text_preview": "Transferring patient records to another clinic I need to verify the clinic faxed the paperwork.",
+      "true_end_time": 6161.0,
+      "silence_ms": 911.0,
+      "category": "ambiguous"
+    },
+    {
+      "id": "turn_user_slow_test_04_tmpl_test_03_165",
+      "user": "user_slow_test_04",
+      "persona": "slow_pauser",
+      "text_preview": "My primary care doctor told me this screening had no out-of-pocket cost, but the billing statement listed an unexpected facility fee.",
+      "true_end_time": 8251.0,
+      "silence_ms": 901.0,
+      "category": "incomplete"
+    }
+  ]
+}
