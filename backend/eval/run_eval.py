@@ -662,8 +662,9 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
     all_runs[f"Strands Decider 2B + Profile ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4){mock_tag}"] = evaluate_decider_virtual(
         turns, cache, MEASURED_GPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats, use_profile=True, pace_builder=pace_builder
     )
+    calib_provenance_label = "[MOCK-DERIVED]" if is_mock else "[REAL-CALIBRATED]"
     calib_run_name = (
-        f"Strands Decider 2B + Calibrated Policy (hi={calib_thresh.hi:.2f}, lo={calib_thresh.lo:.2f}, "
+        f"Strands Decider 2B + Calibrated Policy {calib_provenance_label} (hi={calib_thresh.hi:.2f}, lo={calib_thresh.lo:.2f}, "
         f"{MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4){mock_tag}"
     )
     all_runs[calib_run_name] = evaluate_decider_virtual(
@@ -988,7 +989,12 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
         )
 
     # Bedrock Judge row
-    md_lines.append("| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (no AWS credentials) |")
+    judge_reason = (
+        llm_judge.error_reason
+        if hasattr(llm_judge, "error_reason") and llm_judge.error_reason
+        else "ValidationException: Operation not allowed"
+    )
+    md_lines.append(f"| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED ({judge_reason}) |")
 
     # Reference Ceilings Paired Differences Table
     md_lines.extend([
@@ -1046,7 +1052,7 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
         "",
         "### Policy Threshold Calibration (DEV Split Only)",
         f"- **Grid Search Space**: {calib_stats['grid_size']} candidate (hi, lo) pairs searched on DEV split ({len(dev_turns)} turns).",
-        f"- **Dev-Selected Optimal Thresholds**: `hi = {calib_thresh.hi:.2f}`, `lo = {calib_thresh.lo:.2f}`, `max_hold_ms = {calib_thresh.max_hold_ms:.0f} ms`.",
+        f"- **Dev-Selected Optimal Thresholds**: `hi = {calib_thresh.hi:.2f}`, `lo = {calib_thresh.lo:.2f}`, `max_hold_ms = {calib_thresh.max_hold_ms:.0f} ms` {'[MOCK-DERIVED from mock probabilities]' if is_mock else '[REAL-CALIBRATED]'}.",
         f"- **Dev Calibration Metrics**: Accuracy: {calib_stats['dev_metrics']['accuracy']*100:.1f}%, Premature: {calib_stats['dev_metrics']['premature_rate']*100:.1f}%, Score: {calib_stats['dev_metrics']['score']:.4f}.",
         "- **Test Set Zero Leakage**: Test split was untouched during calibration (evaluated strictly out-of-sample).",
         "",

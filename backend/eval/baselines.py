@@ -120,22 +120,41 @@ class LLMJudgeBaseline:
 
         self._client: Any = None
         self._available = False
+        self._error_reason = ""
 
-        if not self.is_mock and not cfg.env.mock_bedrock:
+        if not self.is_mock:
             try:
                 import boto3
-                client = boto3.client("bedrock-runtime", region_name=self.region_name)
-                # Verify credentials with lightweight STS probe
                 sts = boto3.client("sts", region_name=self.region_name)
                 sts.get_caller_identity()
+                client = boto3.client("bedrock-runtime", region_name=self.region_name)
+                # Probe Converse operation
+                client.converse(
+                    modelId=self.model_id,
+                    messages=[{"role": "user", "content": [{"text": "ping"}]}],
+                    inferenceConfig={"maxTokens": 1, "temperature": 0.0},
+                )
                 self._client = client
                 self._available = True
+                self._error_reason = ""
             except Exception as e:
-                logger.info(f"[LLMJudgeBaseline] Bedrock credentials unavailable ({e}). Marking judge as SKIPPED.")
                 self._available = False
-        elif self.is_mock:
+                err_msg = str(e)
+                if "Operation not allowed" in err_msg or "ValidationException" in str(type(e)):
+                    self._error_reason = "ValidationException: Operation not allowed (model access restricted)"
+                elif "ResourceNotFoundException" in str(type(e)):
+                    self._error_reason = f"ResourceNotFoundException: {e}"
+                else:
+                    self._error_reason = f"{type(e).__name__}: {e}"
+                logger.info(f"[LLMJudgeBaseline] Bedrock Converse unavailable ({self._error_reason}). Marking judge as SKIPPED.")
+        else:
             # Internal test mock only
             self._available = True
+            self._error_reason = ""
+
+    @property
+    def error_reason(self) -> str:
+        return self._error_reason
 
     def is_available(self) -> bool:
         """Return True only if credentials are authenticated or in explicit test mock mode."""

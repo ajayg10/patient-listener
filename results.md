@@ -30,7 +30,7 @@
 | Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 75.3% [70.0%, 80.6%] | [70.6%, 79.5%] | 24.7% [19.4%, 30.0%] | [20.5%, 29.4%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 250 ms [250.0, 250.0] ms | 250 ms | mock cache, virtual clock |
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 80.3% [73.6%, 86.9%] | [75.9%, 84.1%] | 19.7% [13.1%, 26.4%] | [15.9%, 24.1%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 486 ms [485.6, 485.6] ms | 486 ms | mock cache, virtual clock |
 | Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 99.7% [98.9%, 100.0%] | [98.4%, 100.0%] | 0.3% [0.0%, 1.1%] | [0.1%, 1.6%] | 60.2% [41.1%, 78.5%] | [52.9%, 67.1%] | 1036 ms [1035.6, 1035.6] ms | 1436 ms | mock cache + profile, virtual clock |
-| Strands Decider 2B + Calibrated Policy (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | calibrated policy, virtual clock |
+| Strands Decider 2B + Calibrated Policy [MOCK-DERIVED] (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | calibrated policy, virtual clock |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | mock cache, virtual clock |
 | Decider Sweep (100ms Sweep) [MOCK-DECIDER] | 76.9% [71.1%, 83.1%] | [72.3%, 81.0%] | 23.1% [16.9%, 28.9%] | [19.0%, 27.7%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 350 ms [350.0, 350.0] ms | 350 ms | mock cache, virtual clock |
 | Decider Sweep (300ms Sweep) [MOCK-DECIDER] | 81.4% [75.0%, 87.8%] | [77.0%, 85.1%] | 18.6% [12.2%, 25.0%] | [14.9%, 23.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 550 ms [550.0, 550.0] ms | 550 ms | mock cache, virtual clock |
@@ -40,7 +40,7 @@
 | ARCHETYPE-AWARE CEILING | 81.4% [76.4%, 86.4%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [16.6%, 38.4%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (archetype-aware) |
 | USER-AWARE CEILING | 81.9% [77.2%, 86.7%] | [77.6%, 85.6%] | 3.9% [1.1%, 7.2%] | [2.3%, 6.4%] | 28.2% [17.5%, 39.9%] | [22.1%, 35.1%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (user-aware) |
 | ORACLE-UPPER-BOUND (Persona-Aware) | 81.4% [76.4%, 86.4%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [16.6%, 38.4%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (persona-aware) |
-| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (no AWS credentials) |
+| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (ResourceNotFoundException: An error occurred (ResourceNotFoundException) when calling the Converse operation: This model version has reached the end of its life. Please refer to the AWS documentation for more details.) |
 
 ### Reference Ceilings Paired Differences (Cluster Bootstrap 95% CI over Users)
 
@@ -62,7 +62,7 @@
 | Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 15.0% | 250 ms | 25.8% | 250 ms | 33.3% | 250 ms |
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 486 ms | 25.8% | 486 ms | 33.3% | 486 ms |
 | Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 736 ms | 0.0% | 1436 ms | 0.8% | 1036 ms |
-| Strands Decider 2B + Calibrated Policy (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
+| Strands Decider 2B + Calibrated Policy [MOCK-DERIVED] (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
 | PERSONA-BLIND CEILING | 0.0% | 2200 ms | 0.0% | 250 ms | 0.0% | 250 ms |
 | ARCHETYPE-AWARE CEILING | 15.0% | 250 ms | 0.0% | 250 ms | 0.0% | 250 ms |
@@ -81,7 +81,7 @@
 | Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 100.0% | 250 ms | 0.0% | 50.6% | 49.4% |
 | Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 486 ms | 0.0% | 60.6% | 39.4% |
 | Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 1036 ms | 0.0% | 99.4% | 0.6% |
-| Strands Decider 2B + Calibrated Policy (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
+| Strands Decider 2B + Calibrated Policy [MOCK-DERIVED] (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
 | PERSONA-BLIND CEILING | 100.0% | 250 ms | 0.0% | 49.4% | 0.0% |
 | ARCHETYPE-AWARE CEILING | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
@@ -92,7 +92,7 @@
 
 ### Policy Threshold Calibration (DEV Split Only)
 - **Grid Search Space**: 64 candidate (hi, lo) pairs searched on DEV split (180 turns).
-- **Dev-Selected Optimal Thresholds**: `hi = 0.90`, `lo = 0.10`, `max_hold_ms = 2200 ms`.
+- **Dev-Selected Optimal Thresholds**: `hi = 0.90`, `lo = 0.10`, `max_hold_ms = 2200 ms` [MOCK-DERIVED from mock probabilities].
 - **Dev Calibration Metrics**: Accuracy: 100.0%, Premature: 0.0%, Score: 1.0000.
 - **Test Set Zero Leakage**: Test split was untouched during calibration (evaluated strictly out-of-sample).
 
