@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from backend.app.clock import SystemClock
 from backend.app.config import AppConfig, get_config
@@ -36,6 +37,7 @@ from backend.app.events import (
 )
 from backend.app.pace_profile import PaceProfileBuilder
 from backend.app.policy import PolicyThresholds, policy
+from backend.app.regret_log import list_regrets, log_regret
 from backend.app.reply_agent import ReplyAgent
 from backend.app.state_builder import StateBuilder
 from backend.app.turn_manager import TurnManager
@@ -56,6 +58,15 @@ app.add_middleware(
 )
 
 pace_profile_builder = PaceProfileBuilder()
+
+
+class RegretPayload(BaseModel):
+    user_id: str
+    session_id: str
+    state_text: str
+    probs: dict[str, float]
+    silence_ms: float
+    action: str = "RESPOND"
 
 
 def load_scenario_by_id(scenario_id: str) -> dict[str, Any] | None:
@@ -283,7 +294,6 @@ def build_dual_engine_timeline(
                 break
 
         if not pl_final_responded and not cache_miss_error:
-            # Fallback to max_wait if no checkpoint yielded RESPOND
             max_hold_t = turn_end_t + max_wait_ms
             events.append({
                 "event": "respond",
@@ -347,12 +357,7 @@ def list_scenarios() -> list[dict[str, Any]]:
 
 @app.post("/replay/{scenario}")
 async def replay_scenario(scenario: str, request: Request, speed: float = 1.0) -> StreamingResponse:
-    """Streams scripted scenario through Fixed Timeout and Patient Listener engines in parallel.
-
-    Emits SSE (text/event-stream) labeled with cache provenance.
-    Simulates Tesla T4 median latency from config.
-    Returns clear error event on cache miss (never fallback).
-    """
+    """Streams scripted scenario through Fixed Timeout and Patient Listener engines in parallel."""
     t = load_scenario_by_id(scenario)
     if not t:
         raise HTTPException(status_code=404, detail=f"Scenario '{scenario}' not found")
@@ -380,7 +385,6 @@ async def replay_scenario(scenario: str, request: Request, speed: float = 1.0) -
     effective_speed = max(0.01, speed)
 
     async def sse_stream() -> AsyncIterator[str]:
-        # Initial provenance metadata header event
         yield f"data: {json.dumps({'event': 'metadata', 'engine': 'system', 'provenance': cache_provenance, 't_ms': 0.0})}\n\n"
 
         timeline, cache_miss_error = build_dual_engine_timeline(t, cache, cfg, model_id)
@@ -408,6 +412,126 @@ async def replay_scenario(scenario: str, request: Request, speed: float = 1.0) -
     )
 
 
+@app.post("/regret")
+def create_regret(payload: RegretPayload) -> dict[str, Any]:
+    """Logs a turn decision regret event (e.g. premature interruption) to SQLite database."""
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    db_path = Path(cfg.regret_db_path)
+    if not db_path.is_absolute():
+        db_path = repo_root / db_path
+
+    row_id = log_regret(
+        user_id=payload.user_id,
+        session_id=payload.session_id,
+        state_text=payload.state_text,
+        probs=payload.probs,
+        silence_ms=payload.silence_ms,
+        action=payload.action,
+        db_path=db_path,
+    )
+    return {
+        "status": "ok",
+        "regret_id": row_id,
+        "user_id": payload.user_id,
+        "silence_ms": payload.silence_ms,
+    }
+
+
+@app.get("/profile/{user}")
+def get_user_profile(user: str) -> dict[str, Any]:
+    """Retrieves personalized pace profile incorporating user prior history and recorded regrets."""
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    db_path = Path(cfg.regret_db_path)
+    if not db_path.is_absolute():
+        db_path = repo_root / db_path
+
+    user_regrets = list_regrets(user_id=user, db_path=db_path)
+    profile = pace_profile_builder.build_profile(user_id=user, regrets=user_regrets)
+
+    return {
+        "user_id": profile.user_id,
+        "resumed_median_ms": profile.resumed_median_ms,
+        "resumed_p75_ms": profile.resumed_p75_ms,
+        "finished_median_ms": profile.finished_median_ms,
+        "finished_p75_ms": profile.finished_p75_ms,
+        "filler_rate": profile.filler_rate,
+        "typical_words": profile.typical_words,
+        "has_history": profile.has_history,
+        "rendered": profile.render(),
+        "token_count": profile.token_count,
+        "regrets_count": len(user_regrets),
+    }
+
+
+@app.get("/results")
+def get_eval_results() -> dict[str, Any]:
+    """Returns benchmark results JSON plus provenance flag."""
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    results_file = repo_root / "backend" / "eval" / "results" / "eval_results.json"
+
+    if not results_file.exists():
+        return {
+            "status": "not_found",
+            "provenance_flag": "missing",
+            "results": {},
+        }
+
+    with open(results_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    prov = data.get("provenance", {})
+    is_mock = prov.get("is_mock", True) if isinstance(prov, dict) else True
+    prov_flag = "mock" if is_mock else "real"
+
+    return {
+        "provenance_flag": prov_flag,
+        "is_mock": is_mock,
+        **data,
+    }
+
+
+@app.get("/health")
+def health_status() -> dict[str, Any]:
+    """Returns backend, cache provenance, and Bedrock status."""
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    cache_file = Path(cfg.decision_cache_path)
+    if not cache_file.is_absolute():
+        cache_file = repo_root / cache_file
+
+    cache_backend = "unknown"
+    cache_keys = 0
+    if cache_file.exists():
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                first_line = f.readline()
+                if first_line.strip():
+                    item = json.loads(first_line)
+                    cache_backend = item.get("backend", "mock")
+            with open(cache_file, "r", encoding="utf-8") as f:
+                cache_keys = sum(1 for line in f if line.strip())
+        except Exception:
+            pass
+
+    bedrock_status = {
+        "status": "SKIPPED",
+        "model_id": cfg.env.bedrock_model_id,
+        "region": cfg.env.aws_region,
+        "mock_mode": cfg.env.mock_bedrock,
+        "error": "ValidationException: Operation not allowed / ResourceNotFoundException",
+    }
+
+    return {
+        "status": "healthy",
+        "backend": cfg.decider_backend,
+        "cache_provenance": {
+            "backend": cache_backend,
+            "total_keys": cache_keys,
+            "is_mock": (cache_backend == "mock"),
+        },
+        "bedrock_status": bedrock_status,
+    }
+
+
 @app.websocket("/ws/session")
 async def websocket_session(websocket: WebSocket) -> None:
     """Real-time conversational turn-taking WebSocket session.
@@ -430,7 +554,6 @@ async def websocket_session(websocket: WebSocket) -> None:
     )
     reply_agent = ReplyAgent(cfg=cfg)
 
-    # Outgoing event queue for async dispatch over websocket
     outgoing_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
     def handle_turn_event(event: TurnEvent) -> None:
@@ -519,7 +642,6 @@ async def websocket_session(websocket: WebSocket) -> None:
         })
 
     async def sender_task() -> None:
-        """Forward queued turn events and trigger replies on RESPOND."""
         while True:
             msg = await outgoing_queue.get()
             await websocket.send_json(msg)
@@ -529,7 +651,6 @@ async def websocket_session(websocket: WebSocket) -> None:
             outgoing_queue.task_done()
 
     async def ticker_task() -> None:
-        """Periodic background ticker for real-time live sessions."""
         while True:
             await asyncio.sleep(0.05)
             if turn_mgr.state == "PAUSED":
@@ -556,7 +677,6 @@ async def websocket_session(websocket: WebSocket) -> None:
             elif event_type == "reset":
                 turn_mgr.reset()
 
-            # Ensure any synchronous tick consequences are processed
             if turn_mgr.state == "PAUSED":
                 turn_mgr.tick(timestamp_ms=ts)
     except WebSocketDisconnect:
