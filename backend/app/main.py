@@ -656,8 +656,9 @@ async def websocket_session(websocket: WebSocket) -> None:
             if turn_mgr.state == "PAUSED":
                 turn_mgr.tick()
 
+    enable_ticker = websocket.query_params.get("ticker", "true").lower() in ("true", "1")
     sender_future = asyncio.create_task(sender_task())
-    ticker_future = asyncio.create_task(ticker_task())
+    ticker_future = asyncio.create_task(ticker_task()) if enable_ticker else None
 
     try:
         while True:
@@ -676,11 +677,9 @@ async def websocket_session(websocket: WebSocket) -> None:
                 turn_mgr.tick(timestamp_ms=ts)
             elif event_type == "reset":
                 turn_mgr.reset()
-
-            if turn_mgr.state == "PAUSED":
-                turn_mgr.tick(timestamp_ms=ts)
     except WebSocketDisconnect:
         logger.info(f"WebSocket session disconnected for user {user_id}")
     finally:
         sender_future.cancel()
-        ticker_future.cancel()
+        if ticker_future:
+            ticker_future.cancel()

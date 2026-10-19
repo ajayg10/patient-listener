@@ -16,7 +16,7 @@
 | B6 | Pace profile + regret log | DONE | 2026-10-18 |
 | B7 | Confidence-aware policy | DONE | 2026-10-18 |
 | B8 | Reusable pattern package | DONE | 2026-10-17 |
-| B9 | API | DOING | 2026-10-18 |
+| B9 | API | DONE | 2026-10-19 |
 | F1 | Frontend scaffold + WS client | TODO | |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | TODO | |
@@ -1154,6 +1154,26 @@
      - Test replay stream with both engines at high speed.
      - Test cache miss error event.
      - Test reply agent fallback flag.
+
+## Step B9 — DONE
+- **Date**: 2026-10-19
+- **Implemented Artifacts**:
+  - `backend/app/main.py`:
+    * `WS /ws/session`: Real-time conversational turn-taking WebSocket session with streaming token delivery, mock Bedrock fallback, and configurable `ticker` parameter.
+    * `POST /regret`: SQLite regret logging for premature interruptions.
+    * `GET /profile/{user}`: Per-user rolling pace profile retrieval incorporating prior history and logged regrets.
+    * `GET /scenarios`: Catalog listing demo scenarios with preview text and metadata.
+    * `POST /replay/{scenario}`: Dual-engine streaming replay (Fixed 800ms vs Patient Listener) emitting Server-Sent Events (`text/event-stream`), parameterized by `speed`, labeled with active cache provenance and T4 latency annotation; returns strict error event on cache miss (zero fallback).
+    * `GET /results`: Evaluated results JSON with provenance flag.
+    * `GET /health`: Health status reporting backend, cache provenance, and Bedrock status.
+    * CORS origins middleware configured from `config.cors_origins`.
+  - `scripts/pick_demo_scenarios.py`:
+    * Evaluates candidate scenarios against active cache; identifies turns where Fixed interrupts and Patient Listener waits then responds.
+    * Saves 10 picks to `backend/eval/data/demo_scenarios.json` with provenance; warns when active cache is mock-derived.
+  - `backend/tests/test_api.py`:
+    * 9 integration tests covering health, results, scenarios, dynamic profile regret shift, scripted WS session, Bedrock failure fallback flag, dual-engine high-speed replay, cache miss error event, and 404 handling.
+- **Verification**:
+  - Pre-commit checks: `ruff check .` clean (0 errors), `pytest -q` 61/61 passing in 3.82s.
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
