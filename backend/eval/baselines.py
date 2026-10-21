@@ -125,9 +125,12 @@ class LLMJudgeBaseline:
         if not self.is_mock:
             try:
                 import boto3
-                sts = boto3.client("sts", region_name=self.region_name)
+                from botocore.config import Config
+
+                boto_cfg = Config(connect_timeout=3, read_timeout=10, retries={"max_attempts": 1})
+                sts = boto3.client("sts", region_name=self.region_name, config=boto_cfg)
                 sts.get_caller_identity()
-                client = boto3.client("bedrock-runtime", region_name=self.region_name)
+                client = boto3.client("bedrock-runtime", region_name=self.region_name, config=boto_cfg)
                 # Probe Converse operation
                 client.converse(
                     modelId=self.model_id,

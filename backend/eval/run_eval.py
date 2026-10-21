@@ -600,6 +600,7 @@ def compute_reconciled_counts(
 def run_full_evaluation(
     cache_path: Path | None = None,
     fast: bool = False,
+    with_judge: bool = False,
 ) -> None:
     t0_total = time.perf_counter()
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -816,9 +817,19 @@ def run_full_evaluation(
     t_boot = time.perf_counter() - t0_boot
     print(f"[timer] Stage 4/6 (Bootstrap Metrics & CIs): {t_boot:.2f}s (n_resamples={n_resamples})")
 
-    # Bedrock LLM Judge check
-    llm_judge = LLMJudgeBaseline()
-    judge_skipped = not llm_judge.is_available()
+    # Bedrock LLM Judge check (only if --with-judge is explicitly requested)
+    if with_judge:
+        llm_judge = LLMJudgeBaseline()
+        judge_skipped = not llm_judge.is_available()
+        judge_reason = (
+            llm_judge.error_reason
+            if hasattr(llm_judge, "error_reason") and llm_judge.error_reason
+            else "evaluated"
+        )
+    else:
+        llm_judge = None
+        judge_skipped = True
+        judge_reason = "not run in this eval"
 
     test_users_count = len(set(t["user_id"] for t in turns))
     turns_per_user = len(turns) // test_users_count if test_users_count else 0
@@ -1039,11 +1050,6 @@ def run_full_evaluation(
         )
 
     # Bedrock Judge row
-    judge_reason = (
-        llm_judge.error_reason
-        if hasattr(llm_judge, "error_reason") and llm_judge.error_reason
-        else "ValidationException: Operation not allowed"
-    )
     md_lines.append(f"| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED ({judge_reason}) |")
 
     # Reference Ceilings Paired Differences Table
@@ -1222,9 +1228,15 @@ if __name__ == "__main__":
         action="store_true",
         help="Fast development mode (200 bootstrap resamples, 16 calibration candidates)",
     )
+    parser.add_argument(
+        "--with-judge",
+        action="store_true",
+        help="Run Bedrock LLM judge baseline (default: False / SKIPPED)",
+    )
     cli_args = parser.parse_args()
     run_full_evaluation(
         cache_path=cli_args.cache,
         fast=cli_args.fast,
+        with_judge=cli_args.with_judge,
     )
 

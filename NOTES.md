@@ -18,7 +18,7 @@
 | B8 | Reusable pattern package | DONE | 2026-10-17 |
 | B9 | API | DONE | 2026-10-19 |
 | F1 | Frontend scaffold + WS client | DONE | 2026-10-21 |
-| E1 | run_eval speed optimization | DOING | 2026-10-21 |
+| E1 | run_eval speed optimization | DONE | 2026-10-21 |
 | E2 | Real cache validation and archive | TODO | |
 | E3 | Real Decider evaluation | TODO | |
 | F2 | Live view | TODO | |
@@ -1250,6 +1250,7 @@
   * Stage 6/6 (Report Writing & Export): 0.00 s
   * **Total Evaluation Time**: **1.76 seconds**
 - **Progress note (perf commit)**: Vectorized cluster bootstrap with 2D numpy binomial sampling and memoized DEV calibration, accelerating full mock evaluation from 6h 53m to 1.76s.
+- **Progress note (bedrock commit)**: Isolated Bedrock judge behind --with-judge (default SKIPPED), configured boto3 client with strict timeouts (connect 3s, read 10s, max 1 attempt).
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.

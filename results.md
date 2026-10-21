@@ -22,33 +22,33 @@
 
 | Approach | Accuracy (Cluster 95% CI) | Accuracy (Wilson 95% CI) | Premature Interruption (Cluster 95% CI) | Premature (Wilson 95% CI) | Unnecessary Wait (Cluster 95% CI) | Unnecessary Wait (Wilson 95% CI) | Delay P50 (Bootstrap 95% CI) | Delay P95 | Latency Condition |
 |---|---|---|---|---|---|---|---|---|---|
-| Fixed 600ms Baseline | 63.3% [54.2%, 72.2%] | [58.2%, 68.2%] | 34.2% [24.4%, 43.9%] | [29.5%, 39.2%] | 5.0% [1.1%, 10.5%] | [2.6%, 9.2%] | 600 ms [600.0, 600.0] ms | 600 ms | Fixed |
-| Fixed 800ms Baseline | 64.4% [56.9%, 71.4%] | [59.4%, 69.2%] | 18.9% [11.9%, 26.1%] | [15.2%, 23.2%] | 33.1% [17.5%, 50.3%] | [26.7%, 40.3%] | 800 ms [800.0, 800.0] ms | 800 ms | Fixed |
-| Fixed 1200ms Baseline | 70.6% [60.0%, 80.0%] | [65.6%, 75.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 1010 ms [910.0, 1182.0] ms | 1200 ms | Fixed |
-| Text Heuristic Baseline (250ms, dev-tuned) | 75.3% [70.0%, 80.6%] | [70.6%, 79.5%] | 24.7% [19.4%, 30.0%] | [20.5%, 29.4%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 250 ms [250.0, 250.0] ms | 250 ms | dev-tuned |
-| Per-User Text Heuristic (Profile Threshold, No Model) | 86.9% [82.2%, 91.1%] | [83.1%, 90.0%] | 12.8% [8.6%, 17.5%] | [9.7%, 16.6%] | 32.6% [15.5%, 50.0%] | [26.2%, 39.7%] | 707 ms [661.0, 766.0] ms | 928 ms | profile threshold (no model) |
-| Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 75.3% [70.0%, 80.6%] | [70.6%, 79.5%] | 24.7% [19.4%, 30.0%] | [20.5%, 29.4%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 250 ms [250.0, 250.0] ms | 250 ms | mock cache, virtual clock |
-| Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 80.3% [73.6%, 86.9%] | [75.9%, 84.1%] | 19.7% [13.1%, 26.4%] | [15.9%, 24.1%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 486 ms [485.6, 485.6] ms | 486 ms | mock cache, virtual clock |
-| Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 99.7% [98.9%, 100.0%] | [98.4%, 100.0%] | 0.3% [0.0%, 1.1%] | [0.1%, 1.6%] | 60.2% [41.1%, 78.5%] | [52.9%, 67.1%] | 1036 ms [1035.6, 1035.6] ms | 1436 ms | mock cache + profile, virtual clock |
+| Fixed 600ms Baseline | 63.3% [54.1%, 72.0%] | [58.2%, 68.2%] | 34.2% [24.4%, 43.1%] | [29.5%, 39.2%] | 5.0% [0.6%, 10.1%] | [2.6%, 9.2%] | 600 ms [600.0, 600.0] ms | 600 ms | Fixed |
+| Fixed 800ms Baseline | 64.4% [54.7%, 73.1%] | [59.4%, 69.2%] | 18.9% [11.4%, 27.0%] | [15.2%, 23.2%] | 33.1% [18.7%, 47.6%] | [26.7%, 40.3%] | 800 ms [800.0, 800.0] ms | 800 ms | Fixed |
+| Fixed 1200ms Baseline | 70.6% [60.3%, 78.6%] | [65.6%, 75.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 1010 ms [909.8, 1197.1] ms | 1200 ms | Fixed |
+| Text Heuristic Baseline (250ms, dev-tuned) | 75.3% [70.0%, 80.8%] | [70.6%, 79.5%] | 24.7% [19.2%, 30.0%] | [20.5%, 29.4%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 250 ms [250.0, 250.0] ms | 250 ms | dev-tuned |
+| Per-User Text Heuristic (Profile Threshold, No Model) | 86.9% [81.9%, 91.7%] | [83.1%, 90.0%] | 12.8% [8.3%, 17.5%] | [9.7%, 16.6%] | 32.6% [17.0%, 46.0%] | [26.2%, 39.7%] | 707 ms [661.0, 766.0] ms | 928 ms | profile threshold (no model) |
+| Strands Decider 2B (0 ms decision latency) [MOCK-DECIDER] | 75.3% [70.0%, 80.8%] | [70.6%, 79.5%] | 24.7% [19.2%, 30.0%] | [20.5%, 29.4%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 250 ms [250.0, 250.0] ms | 250 ms | mock cache, virtual clock |
+| Strands Decider 2B (236ms GPU, Tesla T4) [MOCK-DECIDER] | 80.3% [74.4%, 87.0%] | [75.9%, 84.1%] | 19.7% [12.8%, 25.9%] | [15.9%, 24.1%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 486 ms [485.6, 485.6] ms | 486 ms | mock cache, virtual clock |
+| Strands Decider 2B + Profile (236ms GPU, Tesla T4) [MOCK-DECIDER] | 99.7% [98.6%, 100.0%] | [98.4%, 100.0%] | 0.3% [0.0%, 1.1%] | [0.1%, 1.6%] | 60.2% [43.1%, 78.5%] | [52.9%, 67.1%] | 1036 ms [1035.6, 1035.6] ms | 1436 ms | mock cache + profile, virtual clock |
 | Strands Decider 2B + Calibrated Policy [MOCK-DERIVED] (hi=0.90, lo=0.10, 236ms GPU, Tesla T4) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | calibrated policy, virtual clock |
 | Strands Decider 2B (3190ms CPU) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | mock cache, virtual clock |
-| Decider Sweep (100ms Sweep) [MOCK-DECIDER] | 76.9% [71.1%, 83.1%] | [72.3%, 81.0%] | 23.1% [16.9%, 28.9%] | [19.0%, 27.7%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 350 ms [350.0, 350.0] ms | 350 ms | mock cache, virtual clock |
-| Decider Sweep (300ms Sweep) [MOCK-DECIDER] | 81.4% [75.0%, 87.8%] | [77.0%, 85.1%] | 18.6% [12.2%, 25.0%] | [14.9%, 23.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 550 ms [550.0, 550.0] ms | 550 ms | mock cache, virtual clock |
+| Decider Sweep (100ms Sweep) [MOCK-DECIDER] | 76.9% [71.1%, 82.8%] | [72.3%, 81.0%] | 23.1% [16.7%, 29.5%] | [19.0%, 27.7%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 350 ms [350.0, 350.0] ms | 350 ms | mock cache, virtual clock |
+| Decider Sweep (300ms Sweep) [MOCK-DECIDER] | 81.4% [75.8%, 87.8%] | [77.0%, 85.1%] | 18.6% [12.2%, 25.0%] | [14.9%, 23.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 2.1%] | 550 ms [550.0, 550.0] ms | 550 ms | mock cache, virtual clock |
 | Decider Sweep (1000ms Sweep) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 1250 ms [1250.0, 1250.0] ms | 1250 ms | mock cache, virtual clock |
 | Decider Sweep (3000ms Sweep) [MOCK-DECIDER] | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | mock cache, virtual clock |
-| PERSONA-BLIND CEILING | 74.7% [68.6%, 80.3%] | [70.0%, 78.9%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 50.3% [41.9%, 59.2%] | [43.1%, 57.5%] | 2200 ms [250.0, 2200.0] ms | 2200 ms | Reference ceiling (blind) |
-| ARCHETYPE-AWARE CEILING | 81.4% [76.4%, 86.4%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [16.6%, 38.4%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (archetype-aware) |
-| USER-AWARE CEILING | 81.9% [77.2%, 86.7%] | [77.6%, 85.6%] | 3.9% [1.1%, 7.2%] | [2.3%, 6.4%] | 28.2% [17.5%, 39.9%] | [22.1%, 35.1%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (user-aware) |
-| ORACLE-UPPER-BOUND (Persona-Aware) | 81.4% [76.4%, 86.4%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [16.6%, 38.4%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (persona-aware) |
-| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (ResourceNotFoundException: An error occurred (ResourceNotFoundException) when calling the Converse operation: This model version has reached the end of its life. Please refer to the AWS documentation for more details.) |
+| PERSONA-BLIND CEILING | 74.7% [69.2%, 80.3%] | [70.0%, 78.9%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 50.3% [42.7%, 58.0%] | [43.1%, 57.5%] | 2200 ms [250.0, 2200.0] ms | 2200 ms | Reference ceiling (blind) |
+| ARCHETYPE-AWARE CEILING | 81.4% [76.9%, 86.4%] | [77.0%, 85.1%] | 5.0% [1.4%, 8.6%] | [3.2%, 7.8%] | 27.1% [16.9%, 37.1%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (archetype-aware) |
+| USER-AWARE CEILING | 81.9% [77.5%, 86.9%] | [77.6%, 85.6%] | 3.9% [1.4%, 7.2%] | [2.3%, 6.4%] | 28.2% [18.7%, 38.7%] | [22.1%, 35.1%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (user-aware) |
+| ORACLE-UPPER-BOUND (Persona-Aware) | 81.4% [76.9%, 86.4%] | [77.0%, 85.1%] | 5.0% [1.4%, 8.6%] | [3.2%, 7.8%] | 27.1% [16.9%, 37.1%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (persona-aware) |
+| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (not run in this eval) |
 
 ### Reference Ceilings Paired Differences (Cluster Bootstrap 95% CI over Users)
 
 | Comparison | Reference Ceiling A | Reference Ceiling B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |
 |---|---|---|---|---|
-| Archetype vs Blind | PERSONA-BLIND CEILING | ARCHETYPE-AWARE CEILING | +6.7% | [+1.4%, +13.1%] |
-| User vs Archetype | ARCHETYPE-AWARE CEILING | USER-AWARE CEILING | +0.6% | [-2.8%, +3.9%] |
-| User vs Blind | PERSONA-BLIND CEILING | USER-AWARE CEILING | +7.2% | [+2.2%, +13.6%] |
+| Archetype vs Blind | PERSONA-BLIND CEILING | ARCHETYPE-AWARE CEILING | +6.7% | [+1.1%, +11.4%] |
+| User vs Archetype | ARCHETYPE-AWARE CEILING | USER-AWARE CEILING | +0.6% | [-3.1%, +3.1%] |
+| User vs Blind | PERSONA-BLIND CEILING | USER-AWARE CEILING | +7.2% | [+1.9%, +12.2%] |
 
 ## 2. Per-Persona Performance Breakdown
 
@@ -91,7 +91,7 @@
 ## 4. Policy Calibration, Probability Reliability & Pareto Frontiers
 
 ### Policy Threshold Calibration (DEV Split Only)
-- **Grid Search Space**: 64 candidate (hi, lo) pairs searched on DEV split (180 turns).
+- **Grid Search Space**: 16 candidate (hi, lo) pairs searched on DEV split (180 turns).
 - **Dev-Selected Optimal Thresholds**: `hi = 0.90`, `lo = 0.10`, `max_hold_ms = 2200 ms` [MOCK-DERIVED from mock probabilities].
 - **Dev Calibration Metrics**: Accuracy: 100.0%, Premature: 0.0%, Score: 1.0000.
 - **Test Set Zero Leakage**: Test split was untouched during calibration (evaluated strictly out-of-sample).
