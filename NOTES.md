@@ -19,7 +19,7 @@
 | B9 | API | DONE | 2026-10-19 |
 | F1 | Frontend scaffold + WS client | DONE | 2026-10-21 |
 | E1 | run_eval speed optimization | DONE | 2026-10-21 |
-| E2 | Real cache validation and archive | DOING | 2026-10-22 |
+| E2 | Real cache validation and archive | DONE | 2026-10-22 |
 | E3 | Real Decider evaluation | TODO | |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | DONE | 2026-10-22 |
@@ -1267,6 +1267,19 @@
   4. Deduplicate and compress `decisions_cache_real.jsonl` into `decisions_cache_real.jsonl.gz`, assert size < 2 MB, and add plain `.jsonl` to `.gitignore`.
   5. Commit `feat: add cache validation and provenance` and `chore: add real decision cache archive`.
 
+## Step E2 — DONE
+- **Verified and validated real decision cache** (`backend/eval/data/decisions_cache_real.jsonl`):
+  * Total records: 8,450. Unique keys: 8,450. Duplicates: 0. Max probability discrepancy: 0.000000.
+  * Canonical state coverage: 8,450 / 8,450 (100.00%). Missing: 0. Extra: 0.
+  * All records verified: `backend == 'local'`, `model_id == 'StrandsAgents/strands-decider-2B-hobson-v19'`, zero mock markers.
+  * Latency distributions measured on Tesla T4 GPU (clean single-process):
+    - Overall Median: 301.19 ms, Overall P95: 306.66 ms.
+    - Question `turn_complete`: median 303.01 ms, p95 307.35 ms (n=4,225).
+    - Question `mid_thought`: median 299.79 ms, p95 304.90 ms (n=4,225).
+  * Provenance exported: `backend/eval/data/decisions_cache_real_provenance.json` (SHA256: `62e85524a69fa3946f86563a37d9df9feceaceb16aded35e73747f3a968b5d14`).
+  * Gzip archive created: `backend/eval/data/decisions_cache_real.jsonl.gz` (544 KB, well under 2 MB limit).
+  * Loaders in `scripts/precompute_decisions.py` and `backend/app/main.py` updated to support transparent `.gz` decompression.
+
 ## Step F3 — PLAN
 - **Goal**: Implement the side-by-side replay demo mode (the hero of the demo video) and a slim results dashboard in React + TypeScript + Tailwind. Ensure UI strictly alerts on mock provenance ("MOCK-DECIDER, not valid for the demo") and refuses to look like a valid demo until the real cache is installed.
 - **Approach**:
@@ -1331,6 +1344,7 @@
 - **Progress note (feat: add results page and plot endpoint)**: Added GET /plots/{name} endpoint for Pareto and reliability curves, and built slim ResultsDashboard rendering Cluster 95% CIs, labeled ceilings, and synthetic data caveats.
 - **Progress note (docs: add demo run steps)**: Documented manual demo execution steps in frontend/README.md and recorded Step F3 completion in NOTES.md.
 - **Progress note (feat: add cache validation and provenance)**: Validated 8450 real T4 decision keys with zero missing and zero discrepancies, recorded Tesla T4 latency stats (median 301.19 ms, p95 306.66 ms), and exported decisions_cache_real_provenance.json.
+- **Progress note (chore: add real decision cache archive)**: Archived verified 8450-record real Tesla T4 decision cache as compressed 544 KB gzip file (decisions_cache_real.jsonl.gz).
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
 - Real-world setup failure & fix: `hf-xet` (Rust background writer in `huggingface_hub`) fails on Windows with `File reconstruction error: Internal Writer Error: Background writer channel closed`. Removing `hf-xet` to force standard HTTP chunked download completely resolves the stall without requiring special toolchains.
 - Large weight download stability: Downloading monolithic 4.5 GB safetensors files over consumer connections can encounter TCP resets; using resumable chunked downloads (`curl.exe -C - --retry 8 --retry-all-errors`) is essential to prevent restarting from 0 bytes.
