@@ -247,6 +247,11 @@ def render_reliability_plot(
             0.5, 0.5, "MOCK-DECIDER", fontsize=36, color="gray",
             alpha=0.18, ha="center", va="center", rotation=30, fontweight="bold"
         )
+    else:
+        fig.text(
+            0.5, 0.015, "Evaluated on real Strands Decider 2B cache (Tesla T4 GPU)",
+            fontsize=9, color="#475569", ha="center"
+        )
 
     plt.tight_layout()
     plt.savefig(output_png)
@@ -491,6 +496,11 @@ def render_pareto_sweeps(
         fig.text(
             0.5, 0.5, "MOCK-DECIDER", fontsize=48, color="gray",
             alpha=0.15, ha="center", va="center", rotation=25, fontweight="bold"
+        )
+    else:
+        fig.text(
+            0.5, 0.015, f"Evaluated on real Strands Decider 2B cache (Tesla T4 GPU, median {gpu_latency_ms:.1f} ms)",
+            fontsize=9, color="#475569", ha="center"
         )
 
     plt.tight_layout()

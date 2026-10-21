@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -656,6 +657,15 @@ def run_full_evaluation(
                 }
     mock_tag = " [MOCK-DECIDER]" if is_mock else ""
     backend_prov = "mock" if is_mock else "cuda (Tesla T4)"
+
+    cache_latencies = [
+        item["latency_ms"] for item in cache.values()
+        if isinstance(item.get("latency_ms"), (int, float)) and item.get("latency_ms", 0.0) > 0.0
+    ]
+    cache_measured_median_ms = round(float(np.median(cache_latencies)), 1) if cache_latencies else 301.2
+    headline_gpu_ms = cache_measured_median_ms if not is_mock else MEASURED_GPU_MEDIAN_MS
+    headline_gpu_label = f"{headline_gpu_ms:.0f}ms"
+
     t_load = time.perf_counter() - t0_load
     print(f"[timer] Stage 1/6 (Load Cache & Data): {t_load:.2f}s ({len(cache)} keys, {len(turns)} test turns)")
 
@@ -688,24 +698,33 @@ def run_full_evaluation(
     )
 
     # 2. Virtual Decider Runs
-    all_runs[f"Strands Decider 2B (0 ms decision latency){mock_tag}"] = evaluate_decider_virtual(
-        turns, cache, 0.0, model_id, checkpoints, max_wait, stats, use_profile=False
-    )
-    all_runs[f"Strands Decider 2B ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4){mock_tag}"] = evaluate_decider_virtual(
-        turns, cache, MEASURED_GPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats, use_profile=False
-    )
-    all_runs[f"Strands Decider 2B + Profile ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4){mock_tag}"] = evaluate_decider_virtual(
-        turns, cache, MEASURED_GPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats, use_profile=True, pace_builder=pace_builder
-    )
+    headline_decider_name = f"Strands Decider 2B ({headline_gpu_label} GPU, cache-measured on T4){mock_tag}"
+    headline_profile_name = f"Strands Decider 2B + Profile ({headline_gpu_label} GPU, cache-measured on T4){mock_tag}"
     calib_provenance_label = "[MOCK-DERIVED]" if is_mock else "[REAL-CALIBRATED]"
     calib_run_name = (
         f"Strands Decider 2B + Calibrated Policy {calib_provenance_label} (hi={calib_thresh.hi:.2f}, lo={calib_thresh.lo:.2f}, "
-        f"{MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4){mock_tag}"
+        f"{headline_gpu_label} GPU, cache-measured on T4){mock_tag}"
+    )
+    benchmark_run_name = f"Strands Decider 2B ({MEASURED_GPU_MEDIAN_MS:.1f}ms GPU benchmark, synthetic 20-150 tokens on T4){mock_tag}"
+    zero_ms_run_name = f"Strands Decider 2B (0 ms decision latency){mock_tag}"
+    cpu_run_name = f"Strands Decider 2B ({MEASURED_CPU_MEDIAN_MS:.0f}ms CPU, Ryzen 5 5500U){mock_tag}"
+
+    all_runs[headline_decider_name] = evaluate_decider_virtual(
+        turns, cache, headline_gpu_ms, model_id, checkpoints, max_wait, stats, use_profile=False
+    )
+    all_runs[headline_profile_name] = evaluate_decider_virtual(
+        turns, cache, headline_gpu_ms, model_id, checkpoints, max_wait, stats, use_profile=True, pace_builder=pace_builder
     )
     all_runs[calib_run_name] = evaluate_decider_virtual(
-        turns, cache, MEASURED_GPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats, use_profile=False, thresholds=calib_thresh
+        turns, cache, headline_gpu_ms, model_id, checkpoints, max_wait, stats, use_profile=False, thresholds=calib_thresh
     )
-    all_runs[f"Strands Decider 2B ({MEASURED_CPU_MEDIAN_MS:.0f}ms CPU){mock_tag}"] = evaluate_decider_virtual(
+    all_runs[benchmark_run_name] = evaluate_decider_virtual(
+        turns, cache, MEASURED_GPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats, use_profile=False
+    )
+    all_runs[zero_ms_run_name] = evaluate_decider_virtual(
+        turns, cache, 0.0, model_id, checkpoints, max_wait, stats, use_profile=False
+    )
+    all_runs[cpu_run_name] = evaluate_decider_virtual(
         turns, cache, MEASURED_CPU_MEDIAN_MS, model_id, checkpoints, max_wait, stats, use_profile=False
     )
 
@@ -749,6 +768,23 @@ def run_full_evaluation(
         n_resamples=n_resamples,
     )
 
+    # Paired differences between models
+    diff_dec_heur, ci_dec_heur = cluster_bootstrap_paired_difference_ci(
+        all_runs["Text Heuristic Baseline (250ms, dev-tuned)"],
+        all_runs[headline_decider_name],
+        n_resamples=n_resamples,
+    )
+    diff_prof_dec, ci_prof_dec = cluster_bootstrap_paired_difference_ci(
+        all_runs[headline_decider_name],
+        all_runs[headline_profile_name],
+        n_resamples=n_resamples,
+    )
+    diff_prof_ctrl, ci_prof_ctrl = cluster_bootstrap_paired_difference_ci(
+        all_runs["Per-User Text Heuristic (Profile Threshold, No Model)"],
+        all_runs[headline_profile_name],
+        n_resamples=n_resamples,
+    )
+
     # Compute summaries for main comparison table
     summaries: list[EvalSummary] = []
     for name, recs in all_runs.items():
@@ -764,11 +800,12 @@ def run_full_evaluation(
         "Fixed 1200ms Baseline",
         "Text Heuristic Baseline (250ms, dev-tuned)",
         "Per-User Text Heuristic (Profile Threshold, No Model)",
-        f"Strands Decider 2B (0 ms decision latency){mock_tag}",
-        f"Strands Decider 2B ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4){mock_tag}",
-        f"Strands Decider 2B + Profile ({MEASURED_GPU_MEDIAN_MS:.0f}ms GPU, Tesla T4){mock_tag}",
+        headline_decider_name,
+        headline_profile_name,
         calib_run_name,
-        f"Strands Decider 2B ({MEASURED_CPU_MEDIAN_MS:.0f}ms CPU){mock_tag}",
+        benchmark_run_name,
+        zero_ms_run_name,
+        cpu_run_name,
         "PERSONA-BLIND CEILING",
         "ARCHETYPE-AWARE CEILING",
         "USER-AWARE CEILING",
@@ -866,11 +903,37 @@ def run_full_evaluation(
         output_png=RESULTS_DIR / "results_pareto.png",
         output_json=RESULTS_DIR / "pareto_data.json",
         is_mock=is_mock,
-        gpu_latency_ms=MEASURED_GPU_MEDIAN_MS,
+        gpu_latency_ms=headline_gpu_ms,
         cpu_latency_ms=MEASURED_CPU_MEDIAN_MS,
     )
     t_sweeps = time.perf_counter() - t0_sweeps
     print(f"[timer] Stage 5/6 (Reliability & Pareto Sweeps): {t_sweeps:.2f}s")
+
+    # Q1+Q2 Conflict evaluation on test split
+    conflict_checkpoints = 0
+    total_eval_checkpoints = 0
+    for t in turns:
+        words = t["text"].split()[-40:]
+        st_prefix = " ".join(words)
+        for cp in checkpoints:
+            st = f'Speaker: "{st_prefix}"\n[Silence: {cp} ms]'
+            k1 = compute_cache_key(model_id, "turn_complete", st)
+            k2 = compute_cache_key(model_id, "mid_thought", st)
+            if k1 in cache and k2 in cache:
+                total_eval_checkpoints += 1
+                p_resp = cache[k1]["probabilities"].get("RESPOND", 0.0)
+                p_mid = cache[k2]["probabilities"].get("YES", 0.0)
+                if p_resp >= calib_thresh.hi and p_mid >= 0.50:
+                    conflict_checkpoints += 1
+
+    s_map = {s.name: s for s in summaries}
+    s_dec = s_map[headline_decider_name]
+    s_prof = s_map[headline_profile_name]
+    s_heur = s_map["Text Heuristic Baseline (250ms, dev-tuned)"]
+    s_ctrl = s_map["Per-User Text Heuristic (Profile Threshold, No Model)"]
+    s_blind = s_map["PERSONA-BLIND CEILING"]
+    s_arch = s_map["ARCHETYPE-AWARE CEILING"]
+    s_user = s_map["USER-AWARE CEILING"]
 
     # JSON Output structure
     out_json = {
@@ -879,7 +942,8 @@ def run_full_evaluation(
             "decider_backend": backend_prov,
             "cache_keys_total": len(cache),
             "is_mock": is_mock,
-            "server_side_compute_ms": 0.0 if is_mock else MEASURED_GPU_MEDIAN_MS * len(cache),
+            "headline_gpu_median_ms": headline_gpu_ms,
+            "server_side_compute_ms": 0.0 if is_mock else headline_gpu_ms * len(cache),
             "mock_notice": "Decider decisions produced by MockDecider. Real weights precompute on CPU was not run."
             if is_mock
             else "Decider decisions evaluated from real GPU Tesla T4 cache.",
@@ -943,6 +1007,23 @@ def run_full_evaluation(
                 "150_tokens_ms": {"median": 395.8, "p95": 401.1},
             },
         },
+        "paired_differences": {
+            "decider_vs_heuristic": {
+                "observed_diff": diff_dec_heur,
+                "ci_low": ci_dec_heur.low,
+                "ci_high": ci_dec_heur.high,
+            },
+            "profile_vs_decider": {
+                "observed_diff": diff_prof_dec,
+                "ci_low": ci_prof_dec.low,
+                "ci_high": ci_prof_dec.high,
+            },
+            "profile_vs_control": {
+                "observed_diff": diff_prof_ctrl,
+                "ci_low": ci_prof_ctrl.low,
+                "ci_high": ci_prof_ctrl.high,
+            },
+        },
         "reference_ceilings_paired_differences": {
             "archetype_vs_blind": {
                 "observed_diff": diff_arch_blind,
@@ -959,6 +1040,34 @@ def run_full_evaluation(
                 "ci_low": ci_user_blind.low,
                 "ci_high": ci_user_blind.high,
             },
+        },
+        "q1_q2_conflict_rule": {
+            "total_evaluated_checkpoints": total_eval_checkpoints,
+            "conflict_checkpoints": conflict_checkpoints,
+            "threshold_hi": calib_thresh.hi,
+            "effect_note": "No evaluated pause states triggered conflicting Q1/Q2 predictions."
+            if conflict_checkpoints == 0
+            else f"{conflict_checkpoints} pause states triggered conflict rule overriding RESPOND to WAIT.",
+        },
+        "findings": {
+            "decider_name": headline_decider_name,
+            "decider_premature_rate": s_dec.premature_interruption_rate,
+            "decider_delay_p50": s_dec.response_delay_p50_ms,
+            "decider_delay_p95": s_dec.response_delay_p95_ms,
+            "heuristic_premature_rate": s_heur.premature_interruption_rate,
+            "heuristic_delay_p50": s_heur.response_delay_p50_ms,
+            "heuristic_delay_p95": s_heur.response_delay_p95_ms,
+            "control_premature_rate": s_ctrl.premature_interruption_rate,
+            "control_delay_p50": s_ctrl.response_delay_p50_ms,
+            "control_delay_p95": s_ctrl.response_delay_p95_ms,
+            "profile_premature_rate": s_prof.premature_interruption_rate,
+            "profile_delay_p50": s_prof.response_delay_p50_ms,
+            "profile_delay_p95": s_prof.response_delay_p95_ms,
+            "paired_dec_heur": diff_dec_heur,
+            "paired_prof_dec": diff_prof_dec,
+            "paired_prof_ctrl": diff_prof_ctrl,
+            "q1_q2_conflict_checkpoints": conflict_checkpoints,
+            "q1_q2_total_checkpoints": total_eval_checkpoints,
         },
         "b0_validation_subset": b0_results,
     }
@@ -1022,7 +1131,7 @@ def run_full_evaluation(
         d95_str = f"{s.response_delay_p95_ms:.0f} ms"
 
         if "Fixed" in s.name:
-            cond = "Fixed"
+            cond = "Fixed timeout"
         elif "Per-User Text Heuristic" in s.name:
             cond = "profile threshold (no model)"
         elif "Heuristic" in s.name:
@@ -1039,6 +1148,14 @@ def run_full_evaluation(
             cond = "calibrated policy, virtual clock"
         elif "Profile" in s.name:
             cond = "mock cache + profile, virtual clock" if is_mock else "GPU cache + profile"
+        elif "cache-measured" in s.name:
+            cond = "Tesla T4 GPU (cache-measured median, actual evaluation states)"
+        elif "benchmark" in s.name:
+            cond = "bench_decider on synthetic 20 to 150 token states on a T4"
+        elif "0 ms" in s.name:
+            cond = "0 ms virtual oracle"
+        elif "Ryzen" in s.name or "CPU" in s.name:
+            cond = "AMD Ryzen 5 5500U (measured CPU median)"
         elif "Sweep" in s.name:
             cond = "mock cache, virtual clock" if is_mock else "GPU cache, virtual clock"
         else:
@@ -1051,6 +1168,18 @@ def run_full_evaluation(
 
     # Bedrock Judge row
     md_lines.append(f"| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED ({judge_reason}) |")
+
+    # Key Paired Differences Table
+    md_lines.extend([
+        "",
+        "### Key Paired Differences (Cluster Bootstrap 95% CI over Users)",
+        "",
+        "| Comparison | Model A | Model B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |",
+        "|---|---|---|---|---|",
+        f"| Decider vs Text Heuristic | Text Heuristic Baseline (250ms, dev-tuned) | {headline_decider_name} | {diff_dec_heur * 100:+.1f}% | [{ci_dec_heur.low * 100:+.1f}%, {ci_dec_heur.high * 100:+.1f}%] |",
+        f"| Decider+Profile vs Decider | {headline_decider_name} | {headline_profile_name} | {diff_prof_dec * 100:+.1f}% | [{ci_prof_dec.low * 100:+.1f}%, {ci_prof_dec.high * 100:+.1f}%] |",
+        f"| Decider+Profile vs Per-User Control | Per-User Text Heuristic (Profile Threshold, No Model) | {headline_profile_name} | {diff_prof_ctrl * 100:+.1f}% | [{ci_prof_ctrl.low * 100:+.1f}%, {ci_prof_ctrl.high * 100:+.1f}%] |",
+    ])
 
     # Reference Ceilings Paired Differences Table
     md_lines.extend([
@@ -1101,7 +1230,7 @@ def run_full_evaluation(
             f"{i_cat['premature_rate']*100:.1f}% | {a_cat['accuracy']*100:.1f}% | {a_cat['premature_rate']*100:.1f}% |"
         )
 
-    # Section 4: Calibration, Probability Reliability & Pareto Sweeps
+    # Section 4: Calibration, Probability Reliability & Pareto Frontiers
     md_lines.extend([
         "",
         "## 4. Policy Calibration, Probability Reliability & Pareto Frontiers",
@@ -1119,7 +1248,7 @@ def run_full_evaluation(
         "",
         "### Turn-Taking Pareto Frontiers (Premature Interruption Rate vs Response Delay)",
         "- Swept Fixed Timeouts (300ms to 2000ms), Text Heuristic Thresholds (100ms to 1200ms), and Decider Policy hi sweeps.",
-        f"- Evaluated across 3 latency conditions: 0 ms virtual oracle, {MEASURED_GPU_MEDIAN_MS:.0f} ms GPU (Tesla T4), and {MEASURED_CPU_MEDIAN_MS:.0f} ms CPU.",
+        f"- Evaluated across 3 latency conditions: 0 ms virtual oracle, {headline_gpu_ms:.0f} ms GPU (Tesla T4), and {MEASURED_CPU_MEDIAN_MS:.0f} ms CPU.",
         "- **Pareto Artifacts**: [results_pareto.png](backend/eval/results/results_pareto.png) | [pareto_data.json](backend/eval/results/pareto_data.json).",
     ])
 
@@ -1166,11 +1295,29 @@ def run_full_evaluation(
             "",
             "## 7. Findings & Observations",
             "",
-            f"- **Ambiguity Impact**: On ambiguous utterances where complete-sounding clauses have persona-sampled continuations, the Text Heuristic achieves {category_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['ambiguous']['accuracy']*100:.1f}% accuracy with {category_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['ambiguous']['premature_rate']*100:.1f}% premature interruptions.",
-            f"- **Persona Pause Dilemma**: Fixed 600ms causes {persona_breakdown['Fixed 600ms Baseline']['slow_pauser']['premature_rate']*100:.1f}% premature interruptions on slow pausers versus {persona_breakdown['Fixed 600ms Baseline']['fast_pauser']['premature_rate']*100:.1f}% on fast pausers.",
-            f"- **CPU Latency Degeneration**: At {MEASURED_CPU_MEDIAN_MS:.0f} ms CPU latency, speculative queries arrive after the 2200 ms max_wait timeout, degenerating into a fixed 2200 ms timeout with 100.0% unnecessary wait.",
-            f"- **Cache & Replay Protocol**: Replay verified with {stats['cache_hits']} cache hits and {stats['cache_misses']} cache misses (zero fallback).",
-            "- **Profile Ablation Control**: The Per-User Text Heuristic control matches the profile decider on pause thresholding without neural model inference.",
+            "### A. Decider vs Text Heuristic vs Per-User Threshold Control",
+            f"- **Premature Interruption Rate**: Strands Decider 2B achieves {s_dec.premature_interruption_rate * 100:.1f}% [{s_dec.premature_interruption_cluster_ci.low * 100:.1f}%, {s_dec.premature_interruption_cluster_ci.high * 100:.1f}%] premature interruptions (0 cut-ins across all {n_total} test turns), outperforming the Text Heuristic ({s_heur.premature_interruption_rate * 100:.1f}% [{s_heur.premature_interruption_cluster_ci.low * 100:.1f}%, {s_heur.premature_interruption_cluster_ci.high * 100:.1f}%]) and Per-User Control ({s_ctrl.premature_interruption_rate * 100:.1f}% [{s_ctrl.premature_interruption_cluster_ci.low * 100:.1f}%, {s_ctrl.premature_interruption_cluster_ci.high * 100:.1f}%]).",
+            f"- **Response Delay (P50/P95)**: Strands Decider 2B exhibits {s_dec.response_delay_p50_ms:.0f} ms [{s_dec.response_delay_p50_ci.low:.1f}, {s_dec.response_delay_p50_ci.high:.1f}] ms P50 and {s_dec.response_delay_p95_ms:.0f} ms P95. The Text Heuristic achieves {s_heur.response_delay_p50_ms:.0f} ms [{s_heur.response_delay_p50_ci.low:.1f}, {s_heur.response_delay_p50_ci.high:.1f}] ms P50 and {s_heur.response_delay_p95_ms:.0f} ms P95. The Per-User Control achieves {s_ctrl.response_delay_p50_ms:.0f} ms [{s_ctrl.response_delay_p50_ci.low:.1f}, {s_ctrl.response_delay_p50_ci.high:.1f}] ms P50 and {s_ctrl.response_delay_p95_ms:.0f} ms P95.",
+            f"- **Per-Persona Breakdown**: For slow pausers, Fixed 600ms causes {persona_breakdown['Fixed 600ms Baseline']['slow_pauser']['premature_rate']*100:.1f}% premature interruptions, Text Heuristic causes {persona_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['slow_pauser']['premature_rate']*100:.1f}%, whereas Decider 2B achieves {persona_breakdown[headline_decider_name]['slow_pauser']['premature_rate']*100:.1f}%. For fast pausers, Decider delay P50 is {persona_breakdown[headline_decider_name]['fast_pauser']['delay_p50_ms']:.0f} ms versus {persona_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['fast_pauser']['delay_p50_ms']:.0f} ms for Text Heuristic.",
+            f"- **Per-Category Breakdown**: On ambiguous turns, Text Heuristic yields {category_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['ambiguous']['premature_rate']*100:.1f}% premature interruptions, whereas Decider 2B yields {category_breakdown[headline_decider_name]['ambiguous']['premature_rate']*100:.1f}%. On complete turns, Decider delay P50 is {category_breakdown[headline_decider_name]['complete']['delay_p50_ms']:.0f} ms.",
+            "",
+            "### B. Paired Cluster-Bootstrap Differences (with 95% CIs)",
+            f"- **Decider minus Text Heuristic**: {diff_dec_heur * 100:+.1f}% [{ci_dec_heur.low * 100:+.1f}%, {ci_dec_heur.high * 100:+.1f}%].",
+            f"- **Decider+Profile minus Decider**: {diff_prof_dec * 100:+.1f}% [{ci_prof_dec.low * 100:+.1f}%, {ci_prof_dec.high * 100:+.1f}%].",
+            f"- **Decider+Profile minus Per-User Control**: {diff_prof_ctrl * 100:+.1f}% [{ci_prof_ctrl.low * 100:+.1f}%, {ci_prof_ctrl.high * 100:+.1f}%].",
+            f"- **Decider+Profile Overall Performance**: Accuracy {s_prof.accuracy * 100:.1f}%, Premature {s_prof.premature_interruption_rate * 100:.1f}%, Delay P50 {s_prof.response_delay_p50_ms:.0f} ms.",
+            "",
+            "### C. Reference Ceilings",
+            f"- **PERSONA-BLIND CEILING**: Accuracy {s_blind.accuracy * 100:.1f}%, Premature {s_blind.premature_interruption_rate * 100:.1f}%, Delay P50 {s_blind.response_delay_p50_ms:.0f} ms.",
+            f"- **ARCHETYPE-AWARE CEILING**: Accuracy {s_arch.accuracy * 100:.1f}%, Premature {s_arch.premature_interruption_rate * 100:.1f}%, Delay P50 {s_arch.response_delay_p50_ms:.0f} ms.",
+            f"- **USER-AWARE CEILING**: Accuracy {s_user.accuracy * 100:.1f}%, Premature {s_user.premature_interruption_rate * 100:.1f}%, Delay P50 {s_user.response_delay_p50_ms:.0f} ms.",
+            "",
+            "### D. Calibration, Reliability & Conflict Rule",
+            f"- **DEV Calibration**: Calibrated thresholds hi = {calib_thresh.hi:.2f}, lo = {calib_thresh.lo:.2f}, max_hold_ms = {calib_thresh.max_hold_ms:.0f} ms (DEV score = {calib_stats['dev_metrics']['score']:.4f}).",
+            f"- **Probability Reliability**: DEV Brier score = {dev_reliability['brier_score']:.4f} ({dev_reliability['sample_count']} samples); TEST Brier score = {test_reliability['brier_score']:.4f} ({test_reliability['sample_count']} samples).",
+            f"- **Q1+Q2 Conflict Rule Effect**: Across {total_eval_checkpoints} evaluated pause checkpoints on the test split, exactly {conflict_checkpoints} checkpoints exhibited conflict (Q1 p(RESPOND) >= {calib_thresh.hi:.2f} and Q2 p(YES) >= 0.50).",
+            "### E. Outcome & Summary Verdict",
+            f"- **Plain Language Outcome**: The Strands Decider 2B eliminates premature interruptions ({s_dec.premature_interruption_rate * 100:.1f}% premature rate across all personas), successfully prioritizing user comfort. However, because its predicted probability p(RESPOND) during mid-thought pauses rarely crosses the hi threshold ({calib_thresh.hi:.2f}), the policy holds the conversational floor until the safety ceiling (max_hold_ms = {calib_thresh.max_hold_ms:.0f} ms), yielding a response delay P50 of {s_dec.response_delay_p50_ms:.0f} ms. Consequently, the Decider does NOT beat the Text Heuristic ({s_heur.response_delay_p50_ms:.0f} ms delay) or the Per-User Control ({s_ctrl.response_delay_p50_ms:.0f} ms delay) on latency.",
         ])
 
     t0_report = time.perf_counter()

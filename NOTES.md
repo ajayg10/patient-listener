@@ -1339,12 +1339,34 @@
     3. The side-by-side dual engine panels streaming live transcript, silence bar, decision checkpoint cards, and unified timeline strip.
     4. The Benchmark Results tab rendering the headline table with Cluster CIs, ceilings, and the two served PNG plots.
 
+## Step E3 — PLAN
+- **Goal**: Run the full real decider evaluation once using `decisions_cache_real.jsonl`, generating headline metrics across latency sources (cache-measured 301.2 ms on Tesla T4, benchmark 235.6 ms, 0 ms oracle, 3190 ms CPU), paired cluster-bootstrap differences, recalibrated DEV policy thresholds, probability reliability, and programmatically generated findings text from `eval_results.json`.
+- **Approach**:
+  1. Update `backend/eval/run_eval.py`:
+     - Dynamically resolve `cache_measured_median_ms` (301.2 ms from real cache records / provenance).
+     - Configure required replay rows:
+       * Headline: `Strands Decider 2B (301ms GPU, cache-measured on T4)`
+       * Profile: `Strands Decider 2B + Profile (301ms GPU, cache-measured on T4)`
+       * Calibrated Policy: `Strands Decider 2B + Calibrated Policy [REAL-CALIBRATED] (hi=0.60, lo=0.10, 301ms GPU, cache-measured on T4)`
+       * Benchmark row: `Strands Decider 2B (235.6ms GPU benchmark, synthetic 20-150 tokens on T4)`
+       * 0 ms row: `Strands Decider 2B (0 ms decision latency)`
+       * CPU row: `Strands Decider 2B (3190ms CPU, Ryzen 5 5500U)`
+       * Sweep rows: 100ms, 300ms, 1000ms, 3000ms.
+     - Compute paired cluster-bootstrap differences for Decider vs Heuristic, Decider+profile vs Decider, Decider+profile vs Per-User Control, along with reference ceilings.
+     - Add watermark / provenance in caption of `results_reliability.png` and `results_pareto.png`.
+     - In Section 7, generate findings directly from `out_json` data.
+  2. Execute `python backend/eval/run_eval.py --cache backend/eval/data/decisions_cache_real.jsonl` (full run, 1000 resamples).
+  3. Verify `eval_results.json` and `results.md` are updated and consistent.
+  4. Pre-commit checks: `ruff check .`, `pytest -q`, secret grep, `git diff --cached --name-only`.
+  5. Commit `feat: run real decider evaluation`. Note in `NOTES.md`.
+
 ## Article material (running list)
 - **Progress note (feat: add side-by-side replay demo)**: Implemented side-by-side replay demo with pure SSE parser, dual engine stream panels, shared timeline strip, speed controls, AbortController cancellation, and mock-decider alert banner.
 - **Progress note (feat: add results page and plot endpoint)**: Added GET /plots/{name} endpoint for Pareto and reliability curves, and built slim ResultsDashboard rendering Cluster 95% CIs, labeled ceilings, and synthetic data caveats.
 - **Progress note (docs: add demo run steps)**: Documented manual demo execution steps in frontend/README.md and recorded Step F3 completion in NOTES.md.
 - **Progress note (feat: add cache validation and provenance)**: Validated 8450 real T4 decision keys with zero missing and zero discrepancies, recorded Tesla T4 latency stats (median 301.19 ms, p95 306.66 ms), and exported decisions_cache_real_provenance.json.
 - **Progress note (chore: add real decision cache archive)**: Archived verified 8450-record real Tesla T4 decision cache as compressed 544 KB gzip file (decisions_cache_real.jsonl.gz).
+- **Progress note (feat: run real decider evaluation)**: Executed full real decider evaluation on Tesla T4 cache (301.2 ms median) across 19 configurations with vectorized cluster bootstrap, paired difference CIs, and provenance-watermarked Pareto/reliability plots.
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
 - Real-world setup failure & fix: `hf-xet` (Rust background writer in `huggingface_hub`) fails on Windows with `File reconstruction error: Internal Writer Error: Background writer channel closed`. Removing `hf-xet` to force standard HTTP chunked download completely resolves the stall without requiring special toolchains.
 - Large weight download stability: Downloading monolithic 4.5 GB safetensors files over consumer connections can encounter TCP resets; using resumable chunked downloads (`curl.exe -C - --retry 8 --retry-all-errors`) is essential to prevent restarting from 0 bytes.
