@@ -17,7 +17,7 @@
 | B7 | Confidence-aware policy | DONE | 2026-10-18 |
 | B8 | Reusable pattern package | DONE | 2026-10-17 |
 | B9 | API | DONE | 2026-10-19 |
-| F1 | Frontend scaffold + WS client | TODO | |
+| F1 | Frontend scaffold + WS client | DONE | 2026-10-21 |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | TODO | |
 | F4 | Profile + regret UI | TODO | |
@@ -1174,6 +1174,40 @@
     * 9 integration tests covering health, results, scenarios, dynamic profile regret shift, scripted WS session, Bedrock failure fallback flag, dual-engine high-speed replay, cache miss error event, and 404 handling.
 - **Verification**:
   - Pre-commit checks: `ruff check .` clean (0 errors), `pytest -q` 61/61 passing in 3.82s.
+
+## Step F1 — PLAN
+- **Goal**: Scaffold frontend directory (`frontend/`) using Vite + React + TypeScript + Tailwind CSS with typed event client matching backend events exactly, robust WebSocket client with reconnect, connection status badge, scenario preview list, and event parity pytest.
+- **Approach**:
+  1. Preflight check: Node (`v24.13.0`), npm (`11.16.0`), and E: free disk space (>80 GB) verified. All installs strictly isolated inside `frontend/`.
+  2. Scaffold `frontend/` using Vite with React + TypeScript template.
+  3. Install dependencies: Tailwind CSS, PostCSS, Autoprefixer, Lucide icons (for clean status/audio cues).
+  4. Create `frontend/src/events.ts` strictly mirroring `backend/app/events.py` schemas (dataclass names, fields, event types).
+  5. Add `backend/tests/test_event_parity.py` asserting every event dataclass in `backend/app/events.py` has a corresponding typed interface in `frontend/src/events.ts`.
+  6. Implement typed WebSocket client (`frontend/src/ws.ts` and `App.tsx`):
+     - Auto-reconnect with exponential backoff and jitter.
+     - Connection status indicator (`Connecting`, `Connected`, `Disconnected`).
+     - Reads `VITE_API_URL` (default `http://localhost:8000`).
+     - Tiny landing dashboard listing `GET /scenarios` with persona, preview text, and true end time.
+  7. Configure `.gitignore` to strictly exclude `node_modules` and `dist`.
+  8. Provide `frontend/README.md` with Windows PowerShell run instructions. Verify `npm run build` succeeds cleanly.
+
+## Step F1 — DONE
+- **Date**: 2026-10-21
+- **Implemented Artifacts**:
+  - `frontend/`:
+    * Scaffolded with Vite + React 19 + TypeScript + Tailwind CSS (`vite.config.ts`, `tailwind.config.js`, `postcss.config.js`, `tsconfig.json`).
+    * `frontend/src/events.ts`: Strongly-typed TypeScript interfaces directly mirroring `backend/app/events.py` (`SpeechStarted`, `SpeechDelta`, `SpeechEnded`, `SilenceProbe`, `DecisionRequested`, `DecisionCompleted`, `DecisionDropped`, `TurnYielded`, `MaxHoldExceeded`, `Decision`, `TurnEvent`).
+    * `frontend/src/ws.ts`: Resilient `PatientListenerWSClient` with configurable reconnect backoff, jitter, typed message dispatcher, and connection state management (`connecting`, `connected`, `reconnecting`, `disconnected`, `error`).
+    * `frontend/src/App.tsx`: Dark-mode interface with live WebSocket status badge, active API endpoint indicator, interactive turn tester, live event stream log, and scenario explorer consuming `GET /scenarios`.
+    * `frontend/.env.example`: Configured with `VITE_API_URL=http://localhost:8000`.
+    * `frontend/README.md`: Windows PowerShell execution, development, and build instructions.
+  - `backend/tests/test_event_parity.py`:
+    * Pytest test suite inspecting AST of `backend/app/events.py` and asserting every defined event dataclass appears as an exported interface in `frontend/src/events.ts`.
+  - `.gitignore`: Configured to strictly exclude `frontend/node_modules/` and `frontend/dist/`.
+- **Verification**:
+  - `npm run build`: built in 1.79s cleanly with zero TypeScript or bundle warnings (`dist/` generated, gitignored).
+  - Python test suite: 64/64 passing in 3.65s (`backend/tests/test_event_parity.py` 3/3 passed).
+  - Ruff check: 0 errors across entire workspace.
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
