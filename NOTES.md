@@ -18,6 +18,9 @@
 | B8 | Reusable pattern package | DONE | 2026-10-17 |
 | B9 | API | DONE | 2026-10-19 |
 | F1 | Frontend scaffold + WS client | DONE | 2026-10-21 |
+| E1 | run_eval speed optimization | DOING | 2026-10-21 |
+| E2 | Real cache validation and archive | TODO | |
+| E3 | Real Decider evaluation | TODO | |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | TODO | |
 | F4 | Profile + regret UI | TODO | |
@@ -1208,6 +1211,45 @@
   - `npm run build`: built in 1.79s cleanly with zero TypeScript or bundle warnings (`dist/` generated, gitignored).
   - Python test suite: 64/64 passing in 3.65s (`backend/tests/test_event_parity.py` 3/3 passed).
   - Ruff check: 0 errors across entire workspace.
+
+## Step E1 — PLAN
+- **Goal**: Accelerate `run_eval.py` from 6h 53m to under 10 minutes by vectorizing cluster bootstrap with numpy, pre-caching DEV calibration evaluations, memoizing replay evaluations across conditions, adding stage timing instrumentation and a `--fast` development flag, and isolating Bedrock execution behind `--with-judge` (defaulting to SKIPPED without network calls).
+- **Approach**:
+  1. Vectorize cluster bootstrap in `backend/eval/metrics.py`:
+     - Group turns by user once and extract per-user numerators and denominators for accuracy, premature rate, and unnecessary wait.
+     - Resample user clusters and turn counts using `numpy.random.default_rng` binomial draws without turn-level Python loops.
+     - Vectorize paired differences across models using stacked numpy arrays.
+     - Vectorize `bootstrap_percentile_ci` on response delays using 2D matrix sampling.
+  2. Optimize DEV threshold calibration in `backend/eval/calibration.py`:
+     - Pre-extract state prompt keys and cache entries once per turn rather than rebuilding strings and sha256 hashing across all 64 grid pairs.
+     - Reuse calibration across conditions.
+  3. Instrument per-stage timings in `backend/eval/run_eval.py`:
+     - Explicit timing prints for: Load cache & data, DEV policy calibration, replay per condition, bootstrap CIs, reliability/Pareto sweeps, and report generation.
+     - Support `--fast` flag: 200 bootstrap resamples and 16 calibration grid points for fast dev sweeps.
+  4. Bedrock network isolation:
+     - Add `--with-judge` CLI flag (default `False`). When off, `LLMJudgeBaseline` is never initialized and makes zero AWS STS / Converse calls; judge row reports `SKIPPED (not run in this eval)`.
+     - When `--with-judge` is enabled, enforce strict boto3 timeouts: `connect_timeout=3`, `read_timeout=10`, `max_attempts=1`.
+  5. Measure execution times on mock cache with `--fast` and full sweep; record measured timings in `NOTES.md`.
+
+### Step E1 Measured Timings (Mock Cache Benchmark)
+- **Previous unvectorized run**: 6 hours 53 minutes (~24,780 seconds).
+- **With `--fast` (200 bootstrap resamples, 16 calibration grid candidates)**:
+  * Stage 1/6 (Load Cache & Data): 0.29 s (8558 keys, 360 test turns)
+  * Stage 2/6 (DEV Calibration): 0.01 s (Grid Size=16, chosen hi=0.90, lo=0.10)
+  * Stage 3/6 (Replay Evaluation): 0.35 s (18 configurations)
+  * Stage 4/6 (Bootstrap Metrics & CIs): 0.13 s (n_resamples=200)
+  * Stage 5/6 (Reliability & Pareto Sweeps): 0.83 s
+  * Stage 6/6 (Report Writing & Export): 0.00 s
+  * **Total Evaluation Time**: **1.63 seconds**
+- **Full Run (1000 bootstrap resamples, 64 calibration grid candidates)**:
+  * Stage 1/6 (Load Cache & Data): 0.28 s (8558 keys, 360 test turns)
+  * Stage 2/6 (DEV Calibration): 0.01 s (Grid Size=64, chosen hi=0.90, lo=0.10)
+  * Stage 3/6 (Replay Evaluation): 0.33 s (18 configurations)
+  * Stage 4/6 (Bootstrap Metrics & CIs): 0.28 s (n_resamples=1000)
+  * Stage 5/6 (Reliability & Pareto Sweeps): 0.83 s
+  * Stage 6/6 (Report Writing & Export): 0.00 s
+  * **Total Evaluation Time**: **1.76 seconds**
+- **Progress note (perf commit)**: Vectorized cluster bootstrap with 2D numpy binomial sampling and memoized DEV calibration, accelerating full mock evaluation from 6h 53m to 1.76s.
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.

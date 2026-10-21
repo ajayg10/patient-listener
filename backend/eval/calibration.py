@@ -29,6 +29,7 @@ def calibrate_policy_on_dev(
     model_id: str,
     checkpoints: list[int],
     max_wait_ms: int,
+    fast: bool = False,
 ) -> tuple[PolicyThresholds, dict[str, Any]]:
     """Grid search (hi, lo) thresholds on DEV split turns ONLY (asserting test is untouched).
 
@@ -42,48 +43,55 @@ def calibrate_policy_on_dev(
         if "test" in user_id or "test" in turn_id or "test" in tmpl_id:
             raise ValueError(f"Contamination detected in dev calibration! Found test element: {turn_id}")
 
-    hi_candidates = [0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90]
-    lo_candidates = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45]
+    if fast:
+        hi_candidates = [0.60, 0.70, 0.80, 0.90]
+        lo_candidates = [0.10, 0.20, 0.30, 0.40]
+    else:
+        hi_candidates = [0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90]
+        lo_candidates = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45]
 
     grid_pairs = [(round(hi, 2), round(lo, 2)) for hi in hi_candidates for lo in lo_candidates if hi > lo]
+
+    # Pre-extract checkpoint items for dev turns once to eliminate repeated string splitting and sha256 hashing
+    dev_turn_evals = []
+    for t in dev_turns:
+        is_complete = t["is_turn_complete"]
+        silence_ms = t["silence_ms"]
+        gt = t["ground_truth"]
+        speech_text = " ".join(t["text"].split()[-40:])
+        cp_items = []
+        for cp in checkpoints:
+            if not is_complete and cp > silence_ms:
+                break
+            if cp >= max_wait_ms:
+                break
+            st = f'Speaker: "{speech_text}"\n[Silence: {cp} ms]'
+            q1_key = compute_cache_key(model_id, "turn_complete", st)
+            q2_key = compute_cache_key(model_id, "mid_thought", st)
+            cached_q1 = cache.get(q1_key)
+            if not cached_q1:
+                continue
+            q1_p = cached_q1["probabilities"]
+            q2_p = cache.get(q2_key, {}).get("probabilities") if q2_key in cache else None
+            cp_items.append((cp, q1_p, q2_p))
+        dev_turn_evals.append((is_complete, gt, cp_items))
 
     best_score = -1.0
     best_hi = 0.70
     best_lo = 0.30
     best_metrics: dict[str, float] = {}
 
+    total = len(dev_turn_evals)
     for hi, lo in grid_pairs:
         thresh = PolicyThresholds(hi=hi, lo=lo, max_hold_ms=float(max_wait_ms))
         correct = 0
-        total = len(dev_turns)
         premature = 0
 
-        for t in dev_turns:
-            silence_ms = t["silence_ms"]
-            is_complete = t["is_turn_complete"]
-            gt = t["ground_truth"]
-
+        for is_complete, gt, cp_items in dev_turn_evals:
             pred_action = "WAIT"
 
-            for cp in checkpoints:
-                if not is_complete and cp > silence_ms:
-                    break
-                if cp >= max_wait_ms:
-                    break
-
-                speech_text = " ".join(t["text"].split()[-40:])
-                st = f'Speaker: "{speech_text}"\n[Silence: {cp} ms]'
-                q1_key = compute_cache_key(model_id, "turn_complete", st)
-                q2_key = compute_cache_key(model_id, "mid_thought", st)
-
-                cached_q1 = cache.get(q1_key)
-                if not cached_q1:
-                    continue
-
-                q1_probs = cached_q1["probabilities"]
-                q2_probs = cache.get(q2_key, {}).get("probabilities") if q2_key in cache else None
-
-                act = policy(q1_probs, cp, thresholds=thresh, q2_probabilities=q2_probs)
+            for cp, q1_p, q2_p in cp_items:
+                act = policy(q1_p, cp, thresholds=thresh, q2_probabilities=q2_p)
                 if act == "RESPOND":
                     pred_action = "RESPOND"
                     break
@@ -97,7 +105,6 @@ def calibrate_policy_on_dev(
                 premature += 1
 
         accuracy = correct / total if total > 0 else 0.0
-        # Multi-objective score: accuracy penalized by premature interruptions
         prem_rate = premature / total if total > 0 else 0.0
         score = accuracy - (0.5 * prem_rate)
 
@@ -326,34 +333,39 @@ def render_pareto_sweeps(
         f"cpu_{cpu_latency_ms:.0f}ms": cpu_latency_ms,
     }
 
-    decider_curves: dict[str, list[dict[str, Any]]] = {}
+    # Pre-extract test turn checkpoints for fast Pareto evaluation
+    turn_cps = []
+    for t in turns:
+        sil = t["silence_ms"]
+        is_c = t["is_turn_complete"]
+        speech_text = " ".join(t["text"].split()[-40:])
+        cps_info = []
+        for cp in checkpoints:
+            if not is_c and cp > sil:
+                break
+            if cp >= max_wait_ms:
+                break
+            st = f'Speaker: "{speech_text}"\n[Silence: {cp} ms]'
+            q1_key = compute_cache_key(model_id, "turn_complete", st)
+            q2_key = compute_cache_key(model_id, "mid_thought", st)
+            if q1_key in cache:
+                q1_p = cache[q1_key]["probabilities"]
+                q2_p = cache.get(q2_key, {}).get("probabilities") if q2_key in cache else None
+                cps_info.append((cp, q1_p, q2_p))
+        turn_cps.append((sil, is_c, cps_info))
 
+    decider_curves: dict[str, list[dict[str, Any]]] = {}
     for lat_name, lat_val in latencies.items():
         curve: list[dict[str, Any]] = []
         for hi in hi_values:
             thresh = PolicyThresholds(hi=hi, lo=0.30, max_hold_ms=float(max_wait_ms))
             prem = 0
             delays = []
-            for t in turns:
-                sil = t["silence_ms"]
-                is_c = t["is_turn_complete"]
-
+            for sil, is_c, cps_info in turn_cps:
                 pred_action = "WAIT"
                 action_delay = float(max_wait_ms)
 
-                for cp in checkpoints:
-                    if not is_c and cp > sil:
-                        break
-                    if cp >= max_wait_ms:
-                        break
-
-                    st = f'Speaker: "{" ".join(t["text"].split()[-40:])}"\n[Silence: {cp} ms]'
-                    q1_key = compute_cache_key(model_id, "turn_complete", st)
-                    q2_key = compute_cache_key(model_id, "mid_thought", st)
-
-                    if q1_key not in cache:
-                        continue
-
+                for cp, q1_p, q2_p in cps_info:
                     arrival = cp + lat_val
                     if not is_c and arrival >= sil:
                         pred_action = "WAIT"
@@ -364,9 +376,6 @@ def render_pareto_sweeps(
                         pred_action = "RESPOND"
                         action_delay = float(max_wait_ms)
                         break
-
-                    q1_p = cache[q1_key]["probabilities"]
-                    q2_p = cache.get(q2_key, {}).get("probabilities") if q2_key in cache else None
 
                     act = policy(q1_p, cp, thresholds=thresh, q2_probabilities=q2_p)
                     if act == "RESPOND":

@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -31,8 +32,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from backend.app.config import get_config
+from backend.app.decider_service import MockDecider
 from backend.app.pace_profile import PaceProfileBuilder
 from backend.app.policy import PolicyThresholds, policy
+from backend.app.questions import QUESTIONS, TURN_COMPLETE_QUESTION
 from backend.app.state_builder import StateBuilder
 from backend.eval.baselines import (
     FixedTimeoutBaseline,
@@ -51,7 +54,7 @@ from backend.eval.metrics import (
     cluster_bootstrap_paired_difference_ci,
     compute_metrics,
 )
-from scripts.precompute_decisions import compute_cache_key, load_cache
+from scripts.precompute_decisions import collect_unique_states, compute_cache_key, load_cache
 
 DATA_DIR = REPO_ROOT / "backend" / "eval" / "data"
 RESULTS_DIR = REPO_ROOT / "backend" / "eval" / "results"
@@ -594,10 +597,16 @@ def compute_reconciled_counts(
     return results
 
 
-def run_full_evaluation(cache_path: Path | None = None) -> None:
+def run_full_evaluation(
+    cache_path: Path | None = None,
+    fast: bool = False,
+) -> None:
+    t0_total = time.perf_counter()
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     cfg = get_config()
 
+    # Stage 1: Load data and cache
+    t0_load = time.perf_counter()
     if not TEST_DATA_PATH.exists():
         from backend.eval.generate_dataset import save_datasets
         save_datasets()
@@ -624,19 +633,44 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
 
     # Provenance detection: strict mock check
     is_mock = any(item.get("backend") == "mock" for item in cache.values()) or len(cache) == 0
+    if is_mock and len(cache) < 8000:
+        unique_items = collect_unique_states(include_speech_resumed=True)
+        mock_client = MockDecider(fake_latency_ms=0.0)
+        for item in unique_items:
+            k = item["key"]
+            if k not in cache:
+                q = QUESTIONS.get(item["question_id"], TURN_COMPLETE_QUESTION)
+                dec = mock_client.decide(item["state_text"], q)
+                cache[k] = {
+                    "key": k,
+                    "model_id": item["model_id"],
+                    "question_id": item["question_id"],
+                    "state_text": item["state_text"],
+                    "checkpoint_ms": item["checkpoint_ms"],
+                    "choice": dec.choice,
+                    "probabilities": dec.probabilities,
+                    "confidence": dec.confidence,
+                    "latency_ms": dec.latency_ms,
+                    "backend": dec.backend,
+                }
     mock_tag = " [MOCK-DECIDER]" if is_mock else ""
     backend_prov = "mock" if is_mock else "cuda (Tesla T4)"
+    t_load = time.perf_counter() - t0_load
+    print(f"[timer] Stage 1/6 (Load Cache & Data): {t_load:.2f}s ({len(cache)} keys, {len(turns)} test turns)")
 
-    # DEV Policy Calibration (asserting test is untouched)
-    calib_thresh, calib_stats = calibrate_policy_on_dev(dev_turns, cache, model_id, checkpoints, max_wait)
+    # Stage 2: DEV Policy Calibration (asserting test is untouched)
+    t0_calib = time.perf_counter()
+    calib_thresh, calib_stats = calibrate_policy_on_dev(dev_turns, cache, model_id, checkpoints, max_wait, fast=fast)
+    t_calib = time.perf_counter() - t0_calib
     print(
-        f"[run_eval] DEV Calibration: Grid Size={calib_stats['grid_size']}, "
+        f"[timer] Stage 2/6 (DEV Calibration): {t_calib:.2f}s | Grid Size={calib_stats['grid_size']}, "
         f"Chosen hi={calib_thresh.hi:.2f}, lo={calib_thresh.lo:.2f}, "
         f"Dev Score={calib_stats['dev_metrics']['score']:.4f} "
         f"(Acc={calib_stats['dev_metrics']['accuracy']*100:.1f}%, Premature={calib_stats['dev_metrics']['premature_rate']*100:.1f}%)"
     )
 
-    # Track record lists for breakdown tables
+    # Stage 3: Baseline & Virtual Replay Evaluation
+    t0_replay = time.perf_counter()
     all_runs: dict[str, list[dict[str, Any]]] = {}
 
     pace_builder = PaceProfileBuilder()
@@ -690,24 +724,34 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
     all_runs["USER-AWARE CEILING"] = evaluate_user_aware_ceiling(turns, personas_dict)
     all_runs["ORACLE-UPPER-BOUND (Persona-Aware)"] = evaluate_oracle_upper_bound(turns)
 
+    t_replay = time.perf_counter() - t0_replay
+    print(f"[timer] Stage 3/6 (Replay Evaluation): {t_replay:.2f}s ({len(all_runs)} configurations)")
+
+    # Stage 4: Bootstrap Metrics & CIs
+    t0_boot = time.perf_counter()
+    n_resamples = 200 if fast else 1000
+
     # Paired differences between reference ceilings (Cluster Bootstrap over users)
     diff_arch_blind, ci_arch_blind = cluster_bootstrap_paired_difference_ci(
         all_runs["PERSONA-BLIND CEILING"],
         all_runs["ARCHETYPE-AWARE CEILING"],
+        n_resamples=n_resamples,
     )
     diff_user_arch, ci_user_arch = cluster_bootstrap_paired_difference_ci(
         all_runs["ARCHETYPE-AWARE CEILING"],
         all_runs["USER-AWARE CEILING"],
+        n_resamples=n_resamples,
     )
     diff_user_blind, ci_user_blind = cluster_bootstrap_paired_difference_ci(
         all_runs["PERSONA-BLIND CEILING"],
         all_runs["USER-AWARE CEILING"],
+        n_resamples=n_resamples,
     )
 
     # Compute summaries for main comparison table
     summaries: list[EvalSummary] = []
     for name, recs in all_runs.items():
-        summaries.append(compute_metrics(recs, name))
+        summaries.append(compute_metrics(recs, name, n_resamples=n_resamples, compute_ci=True))
 
     # B0 cases
     b0_results = evaluate_b0_cases(cache, model_id, stats)
@@ -739,7 +783,7 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
         for p in personas:
             p_recs = [r for r in recs if r.get("archetype") == p]
             if p_recs:
-                s = compute_metrics(p_recs, f"{app} - {p}")
+                s = compute_metrics(p_recs, f"{app} - {p}", compute_ci=False)
                 persona_breakdown[app][p] = {
                     "count": len(p_recs),
                     "accuracy": round(s.accuracy, 4),
@@ -759,7 +803,7 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
         for c in categories:
             c_recs = [r for r in recs if r.get("category") == c]
             if c_recs:
-                s = compute_metrics(c_recs, f"{app} - {c}")
+                s = compute_metrics(c_recs, f"{app} - {c}", compute_ci=False)
                 category_breakdown[app][c] = {
                     "count": len(c_recs),
                     "accuracy": round(s.accuracy, 4),
@@ -768,6 +812,9 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
                     "delay_p50_ms": round(s.response_delay_p50_ms, 1),
                     "delay_p95_ms": round(s.response_delay_p95_ms, 1),
                 }
+
+    t_boot = time.perf_counter() - t0_boot
+    print(f"[timer] Stage 4/6 (Bootstrap Metrics & CIs): {t_boot:.2f}s (n_resamples={n_resamples})")
 
     # Bedrock LLM Judge check
     llm_judge = LLMJudgeBaseline()
@@ -779,7 +826,8 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
     # Dataset reconciliation counts
     reconciled_counts = compute_reconciled_counts(cache, model_id, checkpoints, max_wait)
 
-    # Probability Reliability on Probabilities (not confidence)
+    # Stage 5: Reliability & Pareto Sweeps
+    t0_sweeps = time.perf_counter()
     dev_reliability = compute_probability_reliability(dev_turns, cache, model_id, checkpoints)
     test_reliability = compute_probability_reliability(turns, cache, model_id, checkpoints)
     reliability_out = {
@@ -810,6 +858,8 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
         gpu_latency_ms=MEASURED_GPU_MEDIAN_MS,
         cpu_latency_ms=MEASURED_CPU_MEDIAN_MS,
     )
+    t_sweeps = time.perf_counter() - t0_sweeps
+    print(f"[timer] Stage 5/6 (Reliability & Pareto Sweeps): {t_sweeps:.2f}s")
 
     # JSON Output structure
     out_json = {
@@ -1117,6 +1167,7 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
             "- **Profile Ablation Control**: The Per-User Text Heuristic control matches the profile decider on pause thresholding without neural model inference.",
         ])
 
+    t0_report = time.perf_counter()
     import re
     report_text = "\n".join(md_lines) + "\n"
 
@@ -1130,6 +1181,19 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
             rendered_nums.add(match)
     out_json["rendered_table_numbers"] = sorted(list(rendered_nums), key=lambda x: (float(x), x))
 
+    t_report = time.perf_counter() - t0_report
+    t_total = time.perf_counter() - t0_total
+
+    out_json["stage_timings_s"] = {
+        "stage_1_load_cache_data": round(t_load, 3),
+        "stage_2_dev_calibration": round(t_calib, 3),
+        "stage_3_replay_evaluation": round(t_replay, 3),
+        "stage_4_bootstrap_cis": round(t_boot, 3),
+        "stage_5_sweeps_reliability": round(t_sweeps, 3),
+        "stage_6_report_writing": round(t_report, 3),
+        "total_seconds": round(t_total, 3),
+    }
+
     with open(RESULTS_DIR / "eval_results.json", "w", encoding="utf-8") as f:
         json.dump(out_json, f, indent=2)
 
@@ -1139,6 +1203,8 @@ def run_full_evaluation(cache_path: Path | None = None) -> None:
     with open(REPO_ROOT / "results.md", "w", encoding="utf-8") as f:
         f.write(report_text)
 
+    print(f"[timer] Stage 6/6 (Report Writing & Export): {t_report:.2f}s")
+    print(f"[timer] TOTAL EVALUATION TIME: {t_total:.2f}s")
     print(f"[run_eval] Evaluation complete. Cache hits: {stats['cache_hits']}, Cache misses: {stats['cache_misses']}.")
     print(f"[run_eval] Results written to {RESULTS_DIR / 'results.md'}")
 
@@ -1151,6 +1217,14 @@ if __name__ == "__main__":
         default=None,
         help="Path to precomputed decisions JSONL cache file (default: backend/eval/data/decisions_cache.jsonl)",
     )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Fast development mode (200 bootstrap resamples, 16 calibration candidates)",
+    )
     cli_args = parser.parse_args()
-    run_full_evaluation(cache_path=cli_args.cache)
+    run_full_evaluation(
+        cache_path=cli_args.cache,
+        fast=cli_args.fast,
+    )
 
