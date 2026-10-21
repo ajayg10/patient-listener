@@ -44,7 +44,67 @@ Open your browser at `http://localhost:5173`.
 
 ---
 
-## 2. Production Build
+---
+
+## 2. Manual Demo Run Steps (Step F3 Hero Demo)
+
+### Step 1: Start Backend Server (Terminal 1)
+From repository root `E:\patient-listener`:
+```powershell
+.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+Verify the server starts with the mock cache:
+```powershell
+curl.exe -s http://127.0.0.1:8000/health
+```
+Expected output:
+```json
+{"status":"healthy","backend":"mock","cache_provenance":{"backend":"mock","total_keys":448,"is_mock":true},...}
+```
+
+### Step 2: Verify High-Speed Replay via SSE Stream (PowerShell / curl.exe)
+In another terminal, test a replay run at 20x speed:
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/replay/turn_user_fast_test_01_tmpl_test_04_004?speed=20"
+```
+You will see the line-delimited SSE event stream matching `src/events.ts`:
+1. `metadata` (backend provenance, cache key count, latency note)
+2. `speechstarted` / `speechdelta` / `speechended` (audio word tokens)
+3. `decision_requested` / `decision_completed` (speculative System One checkpoints)
+4. `respond` and `final` summary events per engine (`fixed` and `patient_listener`)
+
+### Step 3: Run Frontend UI (Terminal 2)
+In `frontend/`:
+```powershell
+npm run dev
+```
+Navigate to `http://localhost:5173`.
+
+### Visual Verification Checklist (What to Look At in Browser)
+1. **Provenance Banner (Top)**:
+   - With mock cache: Prominent red full-width banner:
+     `MOCK-DECIDER, not valid for the demo — real GPU decision cache not installed`
+   - With real T4 cache: Emerald badge:
+     `Decisions: real Strands Decider 2B (cached), decision latency 236 ms measured on Tesla T4`
+2. **Side-by-Side Demo Tab**:
+   - **Scenario Picker**: Catalog dropdown showing demo-flagged scenarios (`★ [DEMO]`) first with persona, speaker, and text preview.
+   - **Speed Controls**: Toggle 1x, 2x, 4x.
+   - **Start & Cancel Replay**: Click **Start Replay**. Button flips to **Cancel Replay** (`AbortController`).
+   - **Dual Panels**:
+     - *Left Panel*: **Fixed 800 ms timeout** shows real-time transcript, live silence meter (turns red at 800 ms), premature cut-in indicator if speech continues.
+     - *Right Panel*: **Patient Listener (Decider 2B)** shows transcript, live silence meter, and decision checkpoint cards (`checkpoint_ms`, `WAIT` vs `RESPOND`, `p(done)`, and `latency_ms`).
+   - **Unified Timeline Strip**: Shared horizontal time axis rendering speech blocks, pause silence gaps, true end marker, and response markers for both engines.
+   - **Outcome Line**: Below panels, displays the comparative summary (e.g. Fixed cut in vs Patient Listener waited and answered correctly).
+   - **Play Demo Set**: Click **Play Demo Set** to sequentially evaluate all demo scenarios with a live tally banner showing total cut-ins and mean response delays.
+3. **Benchmark Results Tab**:
+   - Click **Benchmark Results** tab at the top.
+   - **Headline Table**: Approaches (Fixed 800, Text Heuristic, Per-User Control, Strands Decider 2B, Decider+profile, and Reference Ceilings). Displays Cluster 95% CIs and Bootstrap CIs directly from `GET /results`.
+   - **Dual Evaluation Plots**: Serves `results_pareto.png` and `results_reliability.png` directly from `GET /plots/{name}`.
+   - **Caveats**: Prominently highlights `SYNTHETIC Data Caveat`, non-parametric cluster bootstrap methodology, and Tesla T4 latency baseline.
+
+---
+
+## 3. Production Build
 
 To test and compile the production bundle:
 ```powershell

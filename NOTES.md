@@ -22,7 +22,7 @@
 | E2 | Real cache validation and archive | BLOCKED | 2026-10-22 |
 | E3 | Real Decider evaluation | TODO | |
 | F2 | Live view | TODO | |
-| F3 | Side-by-side demo mode | DOING | 2026-10-22 |
+| F3 | Side-by-side demo mode | DONE | 2026-10-22 |
 | F4 | Profile + regret UI | TODO | |
 | F5 | Results dashboard + polish | TODO | |
 | R1 | Ship (submission bundle & docs) | TODO | |
@@ -1289,9 +1289,38 @@
        * Dual PNG plots fetched from `GET /plots/results_pareto.png` and `GET /plots/results_reliability.png`.
        * Clear provenance and synthetic data caveats.
 
+## Step F3 — DONE
+- **Backend enhancements**:
+  * Updated `GET /scenarios` in `backend/app/main.py`: returns `id`, `user`, `persona`, `text_preview`, `true_end_t_ms`, and `demo` boolean flag (demo-flagged scenarios from `demo_scenarios.json` sorted first).
+  * Added `GET /plots/{name}` in `backend/app/main.py`: serves whitelisted evaluation plots (`results_pareto.png`, `results_reliability.png`) from `backend/eval/results/`.
+- **Frontend architecture**:
+  * Two-tab interface ("Side-by-Side Demo" and "Benchmark Results") in `frontend/src/App.tsx`.
+  * Prominent provenance indicator: displays full-width red warning `"MOCK-DECIDER, not valid for the demo — real GPU decision cache not installed"` when running with mock cache, refusing to look like a valid demo until real GPU decision cache is installed.
+  * Side-by-side demo tab:
+    - Pure SSE stream parser in `frontend/src/sse.ts`.
+    - Scenario picker prioritizing demo-flagged scenarios.
+    - 1x, 2x, 4x speed selector and Start/Cancel replay controls with `AbortController`.
+    - Side-by-side comparison panels (Fixed 800 ms timeout vs Patient Listener 2B) with transcript stream, live silence progress bar, decision checkpoint cards, and interrupted badge.
+    - Unified timeline strip (`frontend/src/ReplayTimeline.tsx`) displaying speech blocks, pause silence gaps, true end marker, and engine response markers on a shared axis.
+    - Post-run outcome comparison line and sequential "Play demo set" runner with running cut-in tally.
+  * Slim results tab:
+    - `frontend/src/ResultsDashboard.tsx` fetching `GET /results` with Cluster 95% CIs and bootstrap intervals.
+    - Explicitly labeled reference ceilings and SYNTHETIC data caveat.
+    - Embedded Pareto frontier and Reliability curve PNGs via `GET /plots/{name}`.
+- **Verification**:
+  * High-speed replay tested via `curl.exe` at 20x speed; event sequence strictly matched `frontend/src/events.ts`.
+  * Production bundle compiled cleanly with `npm run build` in 1.48s.
+  * All 65 pytest integration tests and `ruff check .` passed cleanly.
+  * Note: The UI was not visually checked in a browser in this session. When testing in a browser at `http://localhost:5173`, look at:
+    1. The top red alert banner "MOCK-DECIDER, not valid for the demo".
+    2. The scenario dropdown with ★ [DEMO] items listed first.
+    3. The side-by-side dual engine panels streaming live transcript, silence bar, decision checkpoint cards, and unified timeline strip.
+    4. The Benchmark Results tab rendering the headline table with Cluster CIs, ceilings, and the two served PNG plots.
+
 ## Article material (running list)
 - **Progress note (feat: add side-by-side replay demo)**: Implemented side-by-side replay demo with pure SSE parser, dual engine stream panels, shared timeline strip, speed controls, AbortController cancellation, and mock-decider alert banner.
 - **Progress note (feat: add results page and plot endpoint)**: Added GET /plots/{name} endpoint for Pareto and reliability curves, and built slim ResultsDashboard rendering Cluster 95% CIs, labeled ceilings, and synthetic data caveats.
+- **Progress note (docs: add demo run steps)**: Documented manual demo execution steps in frontend/README.md and recorded Step F3 completion in NOTES.md.
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
 - Real-world setup failure & fix: `hf-xet` (Rust background writer in `huggingface_hub`) fails on Windows with `File reconstruction error: Internal Writer Error: Background writer channel closed`. Removing `hf-xet` to force standard HTTP chunked download completely resolves the stall without requiring special toolchains.
 - Large weight download stability: Downloading monolithic 4.5 GB safetensors files over consumer connections can encounter TCP resets; using resumable chunked downloads (`curl.exe -C - --retry 8 --retry-all-errors`) is essential to prevent restarting from 0 bytes.
