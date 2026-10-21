@@ -30,6 +30,13 @@ backend/eval/results/
 *.sqlite3
 backend/app/data/
 
+# Node & Frontend
+node_modules/
+dist/
+.vite/
+frontend/node_modules/
+frontend/dist/
+
 # IDE / OS
 .vscode/
 .idea/
