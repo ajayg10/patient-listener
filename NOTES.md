@@ -1389,6 +1389,7 @@
   * Updated `results.md` programmatically from `eval_results.json`.
 
 ## Article material (running list)
+- **Progress note (fix: read decision latency label from provenance)**: Configured default cache to real 8,450-record cache with 301.2 ms latency; wired dynamic latency and source from /health and provenance JSON into API endpoints and frontend banners.
 - **Progress note (feat: pick demo scenarios from real cache)**: Selected 10 balanced demo scenarios (5 slow_pauser, 5 filler_heavy) from 68 qualifying cases on real Tesla T4 cache.
 - **Progress note (docs: record real decider results and findings)**: Documented real decider benchmark findings, paired bootstrap differences, and latency observations in results.md and NOTES.md.
 - Tesla T4 GPU decision latency: The cache-measured median latency across full evaluation states is 301.2 ms (p95 306.7 ms), compared to the synthetic 20-150 token benchmark median of 235.6 ms reported by bench_decider.py on a T4. The cause of this discrepancy is not established; we report measured numbers without guessing.

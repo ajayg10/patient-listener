@@ -258,10 +258,14 @@ export interface HealthResponse {
   status: string;
   cache_provenance?: {
     backend: string;
-    keys_count: number;
+    keys_count?: number;
+    total_keys?: number;
     model_id?: string;
     is_mock?: boolean;
     note?: string;
+    decision_latency_ms?: number;
+    latency_source?: string;
+    hardware?: string;
   };
   bedrock_status?: {
     status: string;

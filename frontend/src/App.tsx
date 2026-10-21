@@ -341,7 +341,11 @@ export const App: React.FC = () => {
         <div className="w-full bg-emerald-950/80 border-b border-emerald-600/60 px-4 py-2 text-center text-xs text-emerald-200 font-medium tracking-wide flex items-center justify-center gap-2 shadow-md">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
           <span>
-            Decisions: real Strands Decider 2B (cached), decision latency 236 ms measured on Tesla T4
+            Decisions: real Strands Decider 2B (cached), decision latency{" "}
+            {health?.cache_provenance?.decision_latency_ms
+              ? Math.round(health.cache_provenance.decision_latency_ms)
+              : 301}{" "}
+            ms measured on {health?.cache_provenance?.latency_source || "Tesla T4 (cache-measured)"}
           </span>
         </div>
       )}

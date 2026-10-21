@@ -405,13 +405,28 @@ async def replay_scenario(scenario: str, request: Request, speed: float = 1.0) -
     backend = sample_entry.get("backend", "mock")
     model_id = sample_entry.get("model_id", cfg.decider_model_id)
 
+    prov_file = repo_root / "backend" / "eval" / "data" / "decisions_cache_real_provenance.json"
+    latency_source = "Tesla T4 (cache-measured)" if backend != "mock" else "mock"
+    latency_ms = float(cfg.replay_decision_latency_ms)
+    if prov_file.exists() and backend != "mock":
+        try:
+            with open(prov_file, "r", encoding="utf-8") as pf:
+                prov_data = json.load(pf)
+                latency_stats = prov_data.get("latency_statistics", {})
+                latency_ms = float(latency_stats.get("overall_median_ms", latency_ms))
+                hardware = prov_data.get("hardware", "Tesla T4 (Google Colab free tier)")
+                latency_source = f"{hardware} (cache-measured)"
+        except Exception:
+            pass
+
     cache_provenance = {
         "backend": backend,
         "model_id": model_id,
         "keys_count": len(cache),
         "note": "latency measured on Tesla T4, decisions from cache",
         "fixed_timeout_ms": cfg.fixed_replay_timeout_ms,
-        "decision_latency_ms": cfg.replay_decision_latency_ms,
+        "decision_latency_ms": latency_ms,
+        "latency_source": latency_source,
     }
 
     effective_speed = max(0.01, speed)
@@ -532,6 +547,7 @@ def health_status() -> dict[str, Any]:
 
     cache_backend = "unknown"
     cache_keys = 0
+    model_id = cfg.decider_model_id
     if not cache_file.exists():
         gz_cand = Path(str(cache_file) + ".gz")
         if gz_cand.exists():
@@ -550,10 +566,28 @@ def health_status() -> dict[str, Any]:
                 if first_line.strip():
                     item = json.loads(first_line)
                     cache_backend = item.get("backend", "mock")
+                    model_id = item.get("model_id", model_id)
             with open_fn(cache_file, "rt", encoding="utf-8") as f:
                 cache_keys = sum(1 for line in f if line.strip())
         except Exception:
             pass
+
+    prov_file = repo_root / "backend" / "eval" / "data" / "decisions_cache_real_provenance.json"
+    latency_ms = float(cfg.replay_decision_latency_ms)
+    latency_source = "config"
+    hardware = "unknown"
+    if prov_file.exists() and cache_backend != "mock":
+        try:
+            with open(prov_file, "r", encoding="utf-8") as pf:
+                prov_data = json.load(pf)
+                lat_stats = prov_data.get("latency_statistics", {})
+                latency_ms = float(lat_stats.get("overall_median_ms", latency_ms))
+                hardware = prov_data.get("hardware", "Tesla T4 (Google Colab free tier)")
+                latency_source = f"{hardware} (cache-measured)"
+        except Exception:
+            pass
+    elif cache_backend == "mock":
+        latency_source = "mock"
 
     bedrock_status = {
         "status": "SKIPPED",
@@ -569,7 +603,12 @@ def health_status() -> dict[str, Any]:
         "cache_provenance": {
             "backend": cache_backend,
             "total_keys": cache_keys,
+            "keys_count": cache_keys,
+            "model_id": model_id,
             "is_mock": (cache_backend == "mock"),
+            "decision_latency_ms": latency_ms,
+            "latency_source": latency_source,
+            "hardware": hardware,
         },
         "bedrock_status": bedrock_status,
     }

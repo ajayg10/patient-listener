@@ -58,8 +58,8 @@ class EnvSettings(BaseSettings):
     config_path: str = "config.yaml"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"])
     fixed_replay_timeout_ms: int = 800
-    replay_decision_latency_ms: float = 235.6
-    decision_cache_path: str = "backend/eval/data/decisions_cache.jsonl"
+    replay_decision_latency_ms: float = 301.2
+    decision_cache_path: str = "backend/eval/data/decisions_cache_real.jsonl"
     demo_scenarios_path: str = "backend/eval/data/demo_scenarios.json"
 
     model_config = SettingsConfigDict(

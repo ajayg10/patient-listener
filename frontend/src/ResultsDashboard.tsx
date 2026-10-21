@@ -21,6 +21,7 @@ interface EvalResultsData {
     decider_backend: string;
     cache_keys_total: number;
     is_mock: boolean;
+    headline_gpu_median_ms?: number;
     server_side_compute_ms?: number;
     mock_notice?: string;
   };
@@ -128,7 +129,8 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ apiBase }) =
               Real Decision Cache Provenance ({prov?.cache_keys_total ?? 0} keys)
             </span>
             <p className="mt-1 text-emerald-300/80 leading-relaxed">
-              Evaluation executed with real Strands Decider 2B weights precomputed on Tesla T4 GPU (median 235.6 ms).
+              Evaluation executed with real Strands Decider 2B weights precomputed on Tesla T4 GPU (median{" "}
+              {prov?.headline_gpu_median_ms ? prov.headline_gpu_median_ms.toFixed(1) : "301.2"} ms).
             </p>
           </div>
         </div>
@@ -300,7 +302,8 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ apiBase }) =
           </li>
           <li>
             <strong className="text-slate-300">Hardware Latency Model:</strong> GPU evaluation models Strands Decider
-            2B speculative queries arriving at the measured Tesla T4 median (235.6 ms).
+            2B speculative queries arriving at the measured Tesla T4 median (
+            {prov?.headline_gpu_median_ms ? prov.headline_gpu_median_ms.toFixed(1) : "301.2"} ms).
           </li>
           <li>
             <strong className="text-slate-300">Zero Leakage:</strong> Split strictly partitions 15 DEV users (24

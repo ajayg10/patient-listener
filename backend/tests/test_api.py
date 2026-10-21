@@ -219,21 +219,21 @@ def test_replay_both_engines_high_speed(client: TestClient) -> None:
 
 def test_replay_cache_miss_error_event(client: TestClient) -> None:
     """Test that a cache miss returns a clear error event and never falls back."""
-    # turn_user_slow_test_01_tmpl_test_01_121 has a post-resumption checkpoint not present in 448-key cache
     scenario_id = "turn_user_slow_test_01_tmpl_test_01_121"
-    resp = client.post(f"/replay/{scenario_id}?speed=1000")
-    assert resp.status_code == 200
+    with patch("backend.app.main.load_cache", return_value={}):
+        resp = client.post(f"/replay/{scenario_id}?speed=1000")
+        assert resp.status_code == 200
 
-    raw_lines = [line.strip() for line in resp.text.split("\n\n") if line.strip()]
-    events = [json.loads(line[len("data: "):]) for line in raw_lines if line.startswith("data: ")]
+        raw_lines = [line.strip() for line in resp.text.split("\n\n") if line.strip()]
+        events = [json.loads(line[len("data: "):]) for line in raw_lines if line.startswith("data: ")]
 
-    # Check for the clear error event
-    error_events = [ev for ev in events if ev.get("event") == "error"]
-    assert len(error_events) >= 1
-    err = error_events[0]
-    assert err["engine"] == "patient_listener"
-    assert err["error"] == "cache_miss"
-    assert "Cache miss for state key" in err["message"]
+        # Check for the clear error event
+        error_events = [ev for ev in events if ev.get("event") == "error"]
+        assert len(error_events) >= 1
+        err = error_events[0]
+        assert err["engine"] == "patient_listener"
+        assert err["error"] == "cache_miss"
+        assert "Cache miss for state key" in err["message"]
 
 
 def test_replay_unknown_scenario_returns_404(client: TestClient) -> None:
