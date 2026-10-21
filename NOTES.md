@@ -20,7 +20,7 @@
 | F1 | Frontend scaffold + WS client | DONE | 2026-10-21 |
 | E1 | run_eval speed optimization | DONE | 2026-10-21 |
 | E2 | Real cache validation and archive | DONE | 2026-10-22 |
-| E3 | Real Decider evaluation | TODO | |
+| E3 | Real Decider evaluation | DONE | 2026-10-22 |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | DONE | 2026-10-22 |
 | F4 | Profile + regret UI | TODO | |
@@ -1360,7 +1360,38 @@
   4. Pre-commit checks: `ruff check .`, `pytest -q`, secret grep, `git diff --cached --name-only`.
   5. Commit `feat: run real decider evaluation`. Note in `NOTES.md`.
 
+## Step E3 — DONE
+- **Execution & Runtime**:
+  * Executed full evaluation run with `--cache backend/eval/data/decisions_cache_real.jsonl` (zero mock fallbacks).
+  * 10,384 cache hits, 0 cache misses across 19 evaluation configurations.
+  * Runtime: 4.09 seconds total (vectorized cluster bootstrap, calibration, and Pareto sweeps).
+- **Headline Results (out-of-sample TEST split, N=360 turns, 1800 checkpoints)**:
+  * Strands Decider 2B (301ms GPU, cache-measured on T4): Accuracy 100.0% [98.9%, 100.0%], Premature Interruption Rate 0.0% [0.0%, 0.0%], Response Delay P50 2200 ms [2200.0, 2200.0] ms, P95 2200 ms.
+  * Text Heuristic Baseline (250ms, dev-tuned): Accuracy 75.3% [69.7%, 80.6%], Premature Interruption Rate 24.7% [19.4%, 30.3%], Response Delay P50 250 ms [250.0, 250.0] ms, P95 250 ms.
+  * Per-User Text Heuristic Control (Profile Threshold, No Model): Accuracy 87.2% [82.2%, 91.7%], Premature Interruption Rate 12.8% [8.3%, 17.8%], Response Delay P50 707 ms [661.0, 766.0] ms, P95 928 ms.
+- **Paired Cluster-Bootstrap Differences (with 95% CIs over 1000 resamples)**:
+  * Decider minus Text Heuristic: +24.7% [+18.9%, +30.3%].
+  * Decider+Profile minus Decider: +0.0% [+0.0%, +0.0%].
+  * Decider+Profile minus Per-User Control: +13.1% [+8.6%, +18.3%].
+  * Decider+Profile overall: Accuracy 100.0%, Premature 0.0%, Delay P50 2200 ms.
+- **Reference Ceilings**:
+  * PERSONA-BLIND CEILING: Accuracy 74.7%, Premature 0.0%, Delay P50 2200 ms.
+  * ARCHETYPE-AWARE CEILING: Accuracy 81.4%, Premature 5.0%, Delay P50 250 ms (+6.7% vs Blind).
+  * USER-AWARE CEILING: Accuracy 81.9%, Premature 3.9%, Delay P50 250 ms (+7.2% vs Blind, +0.6% vs Archetype).
+- **Calibration, Reliability & Conflict Rule**:
+  * Recalibrated thresholds on DEV split: hi = 0.55, lo = 0.10, max_hold_ms = 2200 ms (DEV score = 1.0000).
+  * Reliability: DEV Brier score = 0.3476 (644 samples); TEST Brier score = 0.3452 (1282 samples).
+  * Q1+Q2 Conflict Rule: exactly 0 / 1800 test checkpoints exhibited conflict (Q1 p(RESPOND) >= 0.55 and Q2 p(YES) >= 0.50).
+- **Verdict & Outcome**:
+  * Plain outcome finding: The Decider eliminates premature cut-ins (0.0% cut-ins across all personas and categories), but does not beat the text heuristic (250 ms) or per-user control (707 ms) on response delay because p(RESPOND) rarely crosses hi during mid-thought pauses, holding until the safety ceiling (2200 ms).
+- **Artifacts**:
+  * Re-generated `results_reliability.png` and `results_pareto.png` with real provenance captions.
+  * Updated `results.md` programmatically from `eval_results.json`.
+
 ## Article material (running list)
+- **Progress note (docs: record real decider results and findings)**: Documented real decider benchmark findings, paired bootstrap differences, and latency observations in results.md and NOTES.md.
+- Tesla T4 GPU decision latency: The cache-measured median latency across full evaluation states is 301.2 ms (p95 306.7 ms), compared to the synthetic 20-150 token benchmark median of 235.6 ms reported by bench_decider.py on a T4. The cause of this discrepancy is not established; we report measured numbers without guessing.
+- Plain language finding on Decider vs heuristic / control trade-off: The real 2B Decider prioritizes avoiding premature interruptions (0.0% cut-ins across all personas and categories), successfully protecting conversational comfort. However, because its predicted probability p(RESPOND) during mid-thought pauses rarely crosses the hi threshold (0.55), the policy holds until max_hold_ms (2200 ms), yielding response delay P50 of 2200 ms. Consequently, the Decider does not beat the text heuristic (250 ms delay) or per-user control (707 ms delay) on speed.
 - **Progress note (feat: add side-by-side replay demo)**: Implemented side-by-side replay demo with pure SSE parser, dual engine stream panels, shared timeline strip, speed controls, AbortController cancellation, and mock-decider alert banner.
 - **Progress note (feat: add results page and plot endpoint)**: Added GET /plots/{name} endpoint for Pareto and reliability curves, and built slim ResultsDashboard rendering Cluster 95% CIs, labeled ceilings, and synthetic data caveats.
 - **Progress note (docs: add demo run steps)**: Documented manual demo execution steps in frontend/README.md and recorded Step F3 completion in NOTES.md.
