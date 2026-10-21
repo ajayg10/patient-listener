@@ -14,6 +14,7 @@ import {
 import type { HealthResponse, ReplayEvent, ScenarioItem } from "./events";
 import { parseSSEStream } from "./sse";
 import { ReplayTimeline, type SpeechSegment } from "./ReplayTimeline";
+import { ResultsDashboard } from "./ResultsDashboard";
 
 interface DecisionEntry {
   checkpointMs: number;
@@ -396,9 +397,7 @@ export const App: React.FC = () => {
       {/* Main Body Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6">
         {activeTab === "results" ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-            Results benchmark dashboard
-          </div>
+          <ResultsDashboard apiBase={apiBase} />
         ) : (
           <div className="space-y-6">
             {/* Control Strip (Scenario Picker + Speed + Run Controls) */}

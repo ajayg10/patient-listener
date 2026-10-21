@@ -21,7 +21,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from backend.app.clock import SystemClock
@@ -371,6 +371,19 @@ def list_scenarios() -> list[dict[str, Any]]:
                     })
 
     return demo_scenarios + other_scenarios
+
+
+@app.get("/plots/{name}")
+def get_plot(name: str) -> FileResponse:
+    """Serves whitelisted evaluation plots (results_pareto.png, results_reliability.png)."""
+    whitelist = {"results_pareto.png", "results_reliability.png"}
+    if name not in whitelist:
+        raise HTTPException(status_code=404, detail="Plot not found")
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    plot_path = repo_root / "backend" / "eval" / "results" / name
+    if not plot_path.exists():
+        raise HTTPException(status_code=404, detail="Plot file does not exist")
+    return FileResponse(plot_path, media_type="image/png")
 
 
 @app.post("/replay/{scenario}")

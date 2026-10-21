@@ -239,3 +239,18 @@ def test_replay_cache_miss_error_event(client: TestClient) -> None:
 def test_replay_unknown_scenario_returns_404(client: TestClient) -> None:
     resp = client.post("/replay/unknown_scenario_id_9999?speed=1000")
     assert resp.status_code == 404
+
+
+def test_plots_endpoint(client: TestClient) -> None:
+    """Test that whitelisted plots are served and unknown plot names return 404."""
+    resp1 = client.get("/plots/results_pareto.png")
+    assert resp1.status_code == 200
+    assert resp1.headers["content-type"] == "image/png"
+
+    resp2 = client.get("/plots/results_reliability.png")
+    assert resp2.status_code == 200
+    assert resp2.headers["content-type"] == "image/png"
+
+    resp_bad = client.get("/plots/malicious_or_unknown.png")
+    assert resp_bad.status_code == 404
+
