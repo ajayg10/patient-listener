@@ -162,12 +162,113 @@ export type ServerMessage =
 /** Scenario item from GET /scenarios */
 export interface ScenarioItem {
   id: string;
-  user_id: string;
-  persona_id: string;
-  archetype: string;
+  user: string;
+  persona: string;
   text_preview: string;
-  true_end_time_ms: number;
-  category: string;
+  true_end_t_ms: number;
+  true_end_time?: number;
   silence_ms: number;
-  is_turn_complete: boolean;
+  category: string;
+  demo?: boolean;
 }
+
+/** Replay SSE event payload emitted by POST /replay/{scenario} */
+export interface ReplayMetadataEvent {
+  event: "metadata";
+  engine: "system";
+  provenance: {
+    backend: string;
+    model_id: string;
+    keys_count: number;
+    note: string;
+    fixed_timeout_ms: number;
+    decision_latency_ms: number;
+  };
+  t_ms: number;
+}
+
+export interface ReplayAudioEvent {
+  event: "speechstarted" | "speechdelta" | "speechended";
+  engine: "audio";
+  text?: string;
+  t_ms: number;
+}
+
+export interface ReplayDecisionRequestedEvent {
+  event: "decision_requested";
+  engine: "patient_listener";
+  checkpoint_ms: number;
+  t_ms: number;
+}
+
+export interface ReplayDecisionCompletedEvent {
+  event: "decision_completed";
+  engine: "patient_listener";
+  checkpoint_ms: number;
+  choice: string;
+  p_done: number;
+  action: string;
+  latency_ms: number;
+  t_ms: number;
+}
+
+export interface ReplayDecisionDroppedEvent {
+  event: "decision_dropped";
+  engine: "patient_listener";
+  reason: string;
+  checkpoint_ms?: number;
+  t_ms: number;
+}
+
+export interface ReplayRespondEvent {
+  event: "respond";
+  engine: "fixed" | "patient_listener";
+  reason: string;
+  silence_ms?: number;
+  t_ms: number;
+}
+
+export interface ReplayFinalEvent {
+  event: "final";
+  engine: "fixed" | "patient_listener";
+  interrupted: boolean;
+  response_delay_ms: number;
+  t_ms: number;
+}
+
+export interface ReplayErrorEvent {
+  event: "error";
+  engine?: string;
+  error: string;
+  message: string;
+  t_ms?: number;
+}
+
+export type ReplayEvent =
+  | ReplayMetadataEvent
+  | ReplayAudioEvent
+  | ReplayDecisionRequestedEvent
+  | ReplayDecisionCompletedEvent
+  | ReplayDecisionDroppedEvent
+  | ReplayRespondEvent
+  | ReplayFinalEvent
+  | ReplayErrorEvent;
+
+export interface HealthResponse {
+  status: string;
+  cache_provenance?: {
+    backend: string;
+    keys_count: number;
+    model_id?: string;
+    is_mock?: boolean;
+    note?: string;
+  };
+  bedrock_status?: {
+    status: string;
+    model_id: string;
+    region: string;
+    mock_mode: boolean;
+    error?: string;
+  };
+}
+

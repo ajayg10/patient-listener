@@ -1,417 +1,819 @@
 import React, { useEffect, useState, useRef } from "react";
 import {
-  Activity,
   AlertCircle,
+  AlertTriangle,
+  BarChart2,
   CheckCircle2,
-  Clock,
-  Mic,
-  Radio,
-  RefreshCw,
-  Send,
-  User,
+  FastForward,
+  Play,
+  ShieldAlert,
+  ShieldCheck,
+  Square,
   Zap,
 } from "lucide-react";
-import type { ScenarioItem, ServerMessage } from "./events";
-import type { ConnectionStatus } from "./ws";
-import { PatientListenerWSClient } from "./ws";
+import type { HealthResponse, ReplayEvent, ScenarioItem } from "./events";
+import { parseSSEStream } from "./sse";
+import { ReplayTimeline, type SpeechSegment } from "./ReplayTimeline";
+
+interface DecisionEntry {
+  checkpointMs: number;
+  action: string;
+  pDone: number;
+  choice: string;
+  latencyMs: number;
+  arrivalMs: number;
+}
 
 export const App: React.FC = () => {
-  const [status, setStatus] = useState<ConnectionStatus>("disconnected");
+  const [activeTab, setActiveTab] = useState<"demo" | "results">("demo");
+  const [health, setHealth] = useState<HealthResponse | null>(null);
   const [scenarios, setScenarios] = useState<ScenarioItem[]>([]);
-  const [isLoadingScenarios, setIsLoadingScenarios] = useState<boolean>(false);
-  const [scenariosError, setScenariosError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ServerMessage[]>([]);
-  const [selectedUser, setSelectedUser] = useState<string>("default_user");
-  const [testInput, setTestInput] = useState<string>(
-    "Can I get a refill on my blood pressure medication please?"
-  );
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
+  const [speed, setSpeed] = useState<number>(1.0);
 
-  const wsClientRef = useRef<PatientListenerWSClient | null>(null);
+  // Replay Execution State
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isDemoSetRunning, setIsDemoSetRunning] = useState<boolean>(false);
+  const [demoSetIndex, setDemoSetIndex] = useState<number>(0);
+  const [demoSetTally, setDemoSetTally] = useState<{
+    total: number;
+    fixedInterrupted: number;
+    plInterrupted: number;
+    fixedDelays: number[];
+    plDelays: number[];
+  }>({
+    total: 0,
+    fixedInterrupted: 0,
+    plInterrupted: 0,
+    fixedDelays: [],
+    plDelays: [],
+  });
+
+  const [replayError, setReplayError] = useState<string | null>(null);
+
+  // Live Engine Tracking
+  const [transcript, setTranscript] = useState<string>("");
+  const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
+  const [currentSilenceMs, setCurrentSilenceMs] = useState<number>(0);
+  const [speechSegments, setSpeechSegments] = useState<SpeechSegment[]>([]);
+  const [decisionsFeed, setDecisionsFeed] = useState<DecisionEntry[]>([]);
+
+  const [fixedState, setFixedState] = useState<{
+    responded: boolean;
+    respondedAtMs: number | null;
+    interrupted: boolean | null;
+    responseDelayMs: number | null;
+  }>({
+    responded: false,
+    respondedAtMs: null,
+    interrupted: null,
+    responseDelayMs: null,
+  });
+
+  const [plState, setPlState] = useState<{
+    responded: boolean;
+    respondedAtMs: number | null;
+    interrupted: boolean | null;
+    responseDelayMs: number | null;
+  }>({
+    responded: false,
+    respondedAtMs: null,
+    interrupted: null,
+    responseDelayMs: null,
+  });
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeSegmentStartRef = useRef<number | null>(null);
+
   const apiBase = (import.meta.env.VITE_API_URL as string) || "http://localhost:8000";
 
-  // Initialize WebSocket connection
-  useEffect(() => {
-    const client = new PatientListenerWSClient({
-      userId: selectedUser,
-      onStatusChange: (newStatus) => {
-        setStatus(newStatus);
-      },
-      onMessage: (msg) => {
-        setMessages((prev) => [msg, ...prev].slice(0, 50));
-      },
-      onError: (err) => {
-        console.error("WS error:", err);
-      },
-    });
+  // Fetch Health & Provenance
+  const fetchHealth = async () => {
+    try {
+      const resp = await fetch(`${apiBase}/health`);
+      if (resp.ok) {
+        const json = await resp.json();
+        setHealth(json);
+      }
+    } catch (err) {
+      console.error("Failed to fetch /health:", err);
+    }
+  };
 
-    wsClientRef.current = client;
-    client.connect();
-
-    return () => {
-      client.disconnect();
-    };
-  }, [selectedUser]);
-
-  // Fetch scenarios
+  // Fetch Scenarios Catalog
   const fetchScenarios = async () => {
-    setIsLoadingScenarios(true);
-    setScenariosError(null);
     try {
       const resp = await fetch(`${apiBase}/scenarios`);
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      if (resp.ok) {
+        const json = await resp.json();
+        const list: ScenarioItem[] = Array.isArray(json) ? json : json.scenarios || [];
+        setScenarios(list);
+        if (list.length > 0 && !selectedScenarioId) {
+          // Default to first demo-flagged scenario
+          const firstDemo = list.find((s) => s.demo) || list[0];
+          setSelectedScenarioId(firstDemo.id);
+        }
       }
-      const data = await resp.json();
-      setScenarios(data.scenarios || []);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setScenariosError(msg);
-    } finally {
-      setIsLoadingScenarios(false);
+    } catch (err) {
+      console.error("Failed to fetch /scenarios:", err);
     }
   };
 
   useEffect(() => {
+    fetchHealth();
     fetchScenarios();
   }, [apiBase]);
 
-  const sendTestTurn = () => {
-    if (!wsClientRef.current || status !== "connected") return;
-    wsClientRef.current.send({ type: "SpeechStarted", timestamp_ms: 0.0 });
-    wsClientRef.current.send({
-      type: "SpeechDelta",
-      text: testInput,
-      timestamp_ms: 150.0,
+  const selectedScenario = scenarios.find((s) => s.id === selectedScenarioId);
+  const isMock = health?.cache_provenance?.is_mock ?? (health?.cache_provenance?.backend === "mock");
+
+  const resetReplayState = () => {
+    setTranscript("");
+    setCurrentTimeMs(0);
+    setCurrentSilenceMs(0);
+    setSpeechSegments([]);
+    setDecisionsFeed([]);
+    setReplayError(null);
+    activeSegmentStartRef.current = null;
+    setFixedState({
+      responded: false,
+      respondedAtMs: null,
+      interrupted: null,
+      responseDelayMs: null,
     });
-    wsClientRef.current.send({ type: "SpeechEnded", timestamp_ms: 2000.0 });
+    setPlState({
+      responded: false,
+      respondedAtMs: null,
+      interrupted: null,
+      responseDelayMs: null,
+    });
   };
 
-  const statusConfig = {
-    connected: {
-      label: "Connected",
-      color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
-      dot: "bg-emerald-400",
-      icon: CheckCircle2,
-    },
-    connecting: {
-      label: "Connecting...",
-      color: "bg-amber-500/20 text-amber-400 border-amber-500/40",
-      dot: "bg-amber-400 animate-pulse",
-      icon: RefreshCw,
-    },
-    reconnecting: {
-      label: "Reconnecting...",
-      color: "bg-amber-500/20 text-amber-400 border-amber-500/40",
-      dot: "bg-amber-400 animate-pulse",
-      icon: RefreshCw,
-    },
-    disconnected: {
-      label: "Disconnected",
-      color: "bg-gray-500/20 text-gray-400 border-gray-500/40",
-      dot: "bg-gray-400",
-      icon: AlertCircle,
-    },
-    error: {
-      label: "Connection Error",
-      color: "bg-rose-500/20 text-rose-400 border-rose-500/40",
-      dot: "bg-rose-400",
-      icon: AlertCircle,
-    },
-  }[status];
+  const handleEvent = (ev: ReplayEvent) => {
+    if (ev.event === "error") {
+      setReplayError(ev.message || ev.error || "Cache miss error during replay");
+      setIsRunning(false);
+      return;
+    }
 
-  const StatusIcon = statusConfig.icon;
+    if (typeof ev.t_ms === "number") {
+      setCurrentTimeMs(ev.t_ms);
+    }
+
+    switch (ev.event) {
+      case "speechstarted": {
+        activeSegmentStartRef.current = ev.t_ms;
+        setCurrentSilenceMs(0);
+        break;
+      }
+      case "speechdelta": {
+        if (ev.text) {
+          setTranscript(ev.text);
+        }
+        break;
+      }
+      case "speechended": {
+        if (activeSegmentStartRef.current !== null) {
+          const seg: SpeechSegment = {
+            startMs: activeSegmentStartRef.current,
+            endMs: ev.t_ms,
+          };
+          setSpeechSegments((prev) => [...prev, seg]);
+          activeSegmentStartRef.current = null;
+        }
+        break;
+      }
+      case "decision_completed": {
+        setCurrentSilenceMs(ev.checkpoint_ms);
+        setDecisionsFeed((prev) => [
+          ...prev,
+          {
+            checkpointMs: ev.checkpoint_ms,
+            action: ev.action,
+            pDone: ev.p_done,
+            choice: ev.choice,
+            latencyMs: ev.latency_ms,
+            arrivalMs: ev.t_ms,
+          },
+        ]);
+        break;
+      }
+      case "decision_dropped": {
+        setCurrentSilenceMs(0);
+        break;
+      }
+      case "respond": {
+        if (ev.engine === "fixed") {
+          setFixedState((prev) => ({
+            ...prev,
+            responded: true,
+            respondedAtMs: ev.t_ms,
+          }));
+        } else if (ev.engine === "patient_listener") {
+          setPlState((prev) => ({
+            ...prev,
+            responded: true,
+            respondedAtMs: ev.t_ms,
+          }));
+        }
+        break;
+      }
+      case "final": {
+        if (ev.engine === "fixed") {
+          setFixedState((prev) => ({
+            ...prev,
+            interrupted: ev.interrupted,
+            responseDelayMs: ev.response_delay_ms,
+          }));
+          setDemoSetTally((prev) => ({
+            ...prev,
+            fixedInterrupted: prev.fixedInterrupted + (ev.interrupted ? 1 : 0),
+            fixedDelays: ev.response_delay_ms !== null ? [...prev.fixedDelays, ev.response_delay_ms] : prev.fixedDelays,
+          }));
+        } else if (ev.engine === "patient_listener") {
+          setPlState((prev) => ({
+            ...prev,
+            interrupted: ev.interrupted,
+            responseDelayMs: ev.response_delay_ms,
+          }));
+          setDemoSetTally((prev) => ({
+            ...prev,
+            total: prev.total + 1,
+            plInterrupted: prev.plInterrupted + (ev.interrupted ? 1 : 0),
+            plDelays: ev.response_delay_ms !== null ? [...prev.plDelays, ev.response_delay_ms] : prev.plDelays,
+          }));
+        }
+        break;
+      }
+    }
+  };
+
+  const runReplay = async (scenarioId: string, replaySpeed: number): Promise<boolean> => {
+    resetReplayState();
+    setIsRunning(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const response = await fetch(`${apiBase}/replay/${scenarioId}?speed=${replaySpeed}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Replay request failed with HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      if (!response.body) {
+        throw new Error("No ReadableStream in replay response");
+      }
+
+      await parseSSEStream(response.body, handleEvent, controller.signal);
+      setIsRunning(false);
+      return true;
+    } catch (err: unknown) {
+      if ((err as Error)?.name === "AbortError") {
+        console.log("Replay aborted by user");
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        setReplayError(msg);
+      }
+      setIsRunning(false);
+      return false;
+    }
+  };
+
+  const startReplay = () => {
+    if (!selectedScenarioId) return;
+    runReplay(selectedScenarioId, speed);
+  };
+
+  const cancelReplay = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsRunning(false);
+    setIsDemoSetRunning(false);
+  };
+
+  // Play Demo Set Sequential Runner
+  const playDemoSet = async () => {
+    const demoScenarios = scenarios.filter((s) => s.demo);
+    if (demoScenarios.length === 0) return;
+
+    setIsDemoSetRunning(true);
+    setDemoSetTally({
+      total: 0,
+      fixedInterrupted: 0,
+      plInterrupted: 0,
+      fixedDelays: [],
+      plDelays: [],
+    });
+
+    for (let i = 0; i < demoScenarios.length; i++) {
+      setDemoSetIndex(i);
+      const sc = demoScenarios[i];
+      setSelectedScenarioId(sc.id);
+
+      const success = await runReplay(sc.id, speed);
+      if (!success) break;
+
+      // Small pause between scenarios
+      await new Promise((r) => setTimeout(r, 600));
+    }
+
+    setIsDemoSetRunning(false);
+  };
 
   return (
-    <div className="min-h-screen bg-[#090d16] text-gray-100 flex flex-col font-sans">
-      {/* Top Navbar */}
-      <header className="border-b border-gray-800/80 bg-[#0d1322]/80 backdrop-blur-md sticky top-0 z-50 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white shadow-lg shadow-indigo-500/20">
-              <Mic className="w-5 h-5" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30">
+      {/* Top Provenance Banner */}
+      {isMock ? (
+        <div className="w-full bg-rose-900 border-b border-rose-700/80 px-4 py-2.5 text-center text-xs text-rose-100 font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-md">
+          <ShieldAlert className="w-4 h-4 text-rose-300" />
+          <span>MOCK-DECIDER, not valid for the demo — real GPU decision cache not installed</span>
+        </div>
+      ) : (
+        <div className="w-full bg-emerald-950/80 border-b border-emerald-600/60 px-4 py-2 text-center text-xs text-emerald-200 font-medium tracking-wide flex items-center justify-center gap-2 shadow-md">
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <span>
+            Decisions: real Strands Decider 2B (cached), decision latency 236 ms measured on Tesla T4
+          </span>
+        </div>
+      )}
+
+      {/* Main App Header */}
+      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-emerald-500 flex items-center justify-center shadow-md shadow-indigo-500/20">
+              <Zap className="w-5 h-5 text-white" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="text-lg font-bold tracking-tight text-white">
-                  Patient Listener
-                </h1>
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Scaffold F1
+              <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                Patient Listener
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-indigo-300 border border-slate-700">
+                  Strands Decider 2B
                 </span>
-              </div>
-              <p className="text-xs text-gray-400">
-                Personalized, Regret-Aware Turn-Taking Architecture
+              </h1>
+              <p className="text-[11px] text-slate-400">
+                Personalized, regret-aware voice turn-taking with speculative System One decisions
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <div className="hidden sm:flex items-center space-x-2 text-xs font-mono text-gray-400 bg-gray-900/60 px-3 py-1.5 rounded-lg border border-gray-800">
-              <span className="text-gray-500">API:</span>
-              <span className="text-indigo-300">{apiBase}</span>
-            </div>
-
-            {/* Connection Status Badge */}
-            <div
-              id="connection-status-badge"
-              className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border text-xs font-medium ${statusConfig.color}`}
+          {/* Tab Navigation */}
+          <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <button
+              onClick={() => setActiveTab("demo")}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+                activeTab === "demo"
+                  ? "bg-indigo-600 text-white shadow"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              }`}
             >
-              <span className={`w-2 h-2 rounded-full ${statusConfig.dot}`} />
-              <StatusIcon className="w-3.5 h-3.5" />
-              <span>{statusConfig.label}</span>
-            </div>
+              <Play className="w-3.5 h-3.5" />
+              Side-by-Side Demo
+            </button>
+            <button
+              onClick={() => setActiveTab("results")}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+                activeTab === "results"
+                  ? "bg-indigo-600 text-white shadow"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              }`}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              Benchmark Results
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: WS Interactive Sandbox & Event Stream */}
-        <section className="lg:col-span-6 flex flex-col space-y-6">
-          {/* Real-time Session Control Box */}
-          <div className="bg-[#0f172a]/90 rounded-2xl border border-gray-800/80 p-5 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-2">
-                <Radio className="w-4 h-4 text-indigo-400" />
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-200">
-                  Live Turn Session
-                </h2>
-              </div>
-              <div className="flex items-center space-x-2">
-                <User className="w-3.5 h-3.5 text-gray-400" />
+      {/* Main Body Content */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6">
+        {activeTab === "results" ? (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
+            Results benchmark dashboard
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Control Strip (Scenario Picker + Speed + Run Controls) */}
+            <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
+              {/* Scenario Picker */}
+              <div className="flex-1 min-w-[320px]">
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Select Conversational Scenario
+                </label>
                 <select
-                  value={selectedUser}
-                  onChange={(e) => setSelectedUser(e.target.value)}
-                  className="bg-gray-900 border border-gray-700 text-xs rounded-lg px-2.5 py-1 text-gray-300 focus:outline-none focus:border-indigo-500"
+                  disabled={isRunning}
+                  value={selectedScenarioId}
+                  onChange={(e) => {
+                    setSelectedScenarioId(e.target.value);
+                    resetReplayState();
+                  }}
+                  className="w-full bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                 >
-                  <option value="default_user">default_user (Neutral)</option>
-                  <option value="user_fast_test_01">user_fast_test_01 (Fast Pauser)</option>
-                  <option value="user_slow_test_01">user_slow_test_01 (Slow Pauser)</option>
-                  <option value="user_filler_test_01">user_filler_test_01 (Filler Heavy)</option>
+                  {scenarios.map((sc) => (
+                    <option key={sc.id} value={sc.id}>
+                      {sc.demo ? "★ [DEMO] " : "  "}
+                      {sc.persona} ({sc.user}): &ldquo;{sc.text_preview.slice(0, 75)}
+                      {sc.text_preview.length > 75 ? "..." : ""}&rdquo;
+                    </option>
+                  ))}
                 </select>
               </div>
-            </div>
 
-            <div className="space-y-3">
+              {/* Speed Selector */}
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Test Utterance Fragment
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Replay Speed
                 </label>
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={testInput}
-                    onChange={(e) => setTestInput(e.target.value)}
-                    placeholder="Speak or type test phrase..."
-                    className="flex-1 bg-gray-900/90 border border-gray-700/80 rounded-xl px-3.5 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
-                  />
+                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                  {[1.0, 2.0, 4.0].map((s) => (
+                    <button
+                      key={s}
+                      disabled={isRunning}
+                      onClick={() => setSpeed(s)}
+                      className={`px-3 py-1 text-xs font-semibold rounded ${
+                        speed === s
+                          ? "bg-indigo-600 text-white"
+                          : "text-slate-400 hover:text-slate-200"
+                      } disabled:opacity-50`}
+                    >
+                      {s}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 pt-5">
+                {!isRunning ? (
                   <button
-                    id="btn-send-test-turn"
-                    onClick={sendTestTurn}
-                    disabled={status !== "connected"}
-                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all"
+                    onClick={startReplay}
+                    disabled={!selectedScenarioId}
+                    className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition shadow-lg shadow-emerald-600/20 disabled:opacity-50"
                   >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Send Turn</span>
+                    <Play className="w-4 h-4 fill-current" />
+                    Start Replay
                   </button>
-                </div>
-              </div>
-              <p className="text-[11px] text-gray-400">
-                Dispatches <code className="text-indigo-300">SpeechStarted</code>, <code className="text-indigo-300">SpeechDelta</code>, and <code className="text-indigo-300">SpeechEnded</code> over WebSocket to exercise the server policy.
-              </p>
-            </div>
-          </div>
-
-          {/* Event Stream Log */}
-          <div className="flex-1 bg-[#0f172a]/90 rounded-2xl border border-gray-800/80 p-5 shadow-xl flex flex-col min-h-[380px]">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-200">
-                  WebSocket Event Log
-                </h2>
-              </div>
-              <span className="text-xs font-mono text-gray-500">
-                {messages.length} events
-              </span>
-            </div>
-
-            <div
-              id="event-log-container"
-              className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[420px] font-mono text-xs"
-            >
-              {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-gray-500 text-center py-16">
-                  <Activity className="w-8 h-8 text-gray-600 mb-2 stroke-1" />
-                  <p>No WebSocket events received yet.</p>
-                  <p className="text-[11px] text-gray-600 mt-1">
-                    Connect backend and send a test turn above.
-                  </p>
-                </div>
-              ) : (
-                messages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded-lg bg-gray-900/80 border border-gray-800/90 hover:border-gray-700/80 transition-all"
+                ) : (
+                  <button
+                    onClick={cancelReplay}
+                    className="flex items-center gap-2 px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition shadow-lg shadow-rose-600/20"
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold text-indigo-400 uppercase text-[11px]">
-                        {msg.type}
-                      </span>
-                      {"timestamp_ms" in msg && (
-                        <span className="text-[10px] text-gray-500">
-                          {Number(msg.timestamp_ms).toFixed(0)} ms
-                        </span>
-                      )}
-                    </div>
-                    {msg.type === "decision" && (
-                      <div className="text-gray-300 text-[11px] space-y-0.5">
-                        <div className="flex justify-between">
-                          <span>Action:</span>
-                          <span
-                            className={`font-bold ${
-                              msg.action === "RESPOND"
-                                ? "text-emerald-400"
-                                : "text-amber-400"
-                            }`}
-                          >
-                            {msg.action}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-gray-400">
-                          <span>Checkpoint:</span>
-                          <span>{msg.checkpoint} ms</span>
-                        </div>
-                        <div className="flex justify-between text-gray-400">
-                          <span>p_done:</span>
-                          <span>{(msg.p_done * 100).toFixed(1)}%</span>
-                        </div>
-                      </div>
-                    )}
-                    {msg.type === "reply_chunk" && (
-                      <div className="text-emerald-300 text-xs mt-1">
-                        &ldquo;{msg.chunk}&rdquo;
-                      </div>
-                    )}
-                    {msg.type === "reply_done" && (
-                      <div className="text-emerald-400 font-sans text-xs mt-1 bg-emerald-950/40 p-2 rounded border border-emerald-800/50">
-                        {msg.full_reply}
-                      </div>
-                    )}
-                    {msg.type !== "decision" &&
-                      msg.type !== "reply_chunk" &&
-                      msg.type !== "reply_done" && (
-                        <pre className="text-[10px] text-gray-400 overflow-x-auto whitespace-pre-wrap">
-                          {JSON.stringify(msg, null, 2)}
-                        </pre>
-                      )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </section>
+                    <Square className="w-4 h-4 fill-current" />
+                    Cancel Replay
+                  </button>
+                )}
 
-        {/* Right Column: Scenario Explorer (GET /scenarios) */}
-        <section className="lg:col-span-6 flex flex-col space-y-6">
-          <div className="bg-[#0f172a]/90 rounded-2xl border border-gray-800/80 p-5 shadow-xl flex-1 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-2">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-200">
-                  Scenario Catalog
-                </h2>
+                <button
+                  onClick={playDemoSet}
+                  disabled={isRunning}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 font-semibold text-xs transition disabled:opacity-50"
+                  title="Run all demo-flagged scenarios in sequence"
+                >
+                  <FastForward className="w-4 h-4 text-indigo-400" />
+                  Play Demo Set
+                </button>
               </div>
-              <button
-                id="btn-refresh-scenarios"
-                onClick={fetchScenarios}
-                disabled={isLoadingScenarios}
-                className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs transition-all disabled:opacity-50"
-              >
-                <RefreshCw
-                  className={`w-3 h-3 ${isLoadingScenarios ? "animate-spin" : ""}`}
-                />
-                <span>Refresh</span>
-              </button>
             </div>
 
-            {scenariosError ? (
-              <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs flex items-start space-x-3">
-                <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-400" />
-                <div>
-                  <p className="font-semibold">Failed to load scenarios</p>
-                  <p className="text-[11px] text-rose-400 mt-0.5">{scenariosError}</p>
+            {/* Running Demo Set Tally Banner */}
+            {(isDemoSetRunning || demoSetTally.total > 0) && (
+              <div className="bg-indigo-950/60 border border-indigo-700/60 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-indigo-200 shadow-md">
+                <div className="flex items-center gap-2">
+                  <FastForward className={`w-4 h-4 text-indigo-400 ${isDemoSetRunning ? "animate-pulse" : ""}`} />
+                  <span className="font-semibold">
+                    {isDemoSetRunning
+                      ? `Demo Set Running: Scenario ${demoSetIndex + 1} of ${scenarios.filter((s) => s.demo).length}`
+                      : `Demo Set Completed (${demoSetTally.total} scenarios evaluated)`}
+                  </span>
                 </div>
-              </div>
-            ) : isLoadingScenarios ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-500 py-16">
-                <RefreshCw className="w-6 h-6 animate-spin mb-2" />
-                <p className="text-xs">Fetching test scenarios...</p>
-              </div>
-            ) : scenarios.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-500 py-16 text-center">
-                <p className="text-xs">No scenarios available.</p>
-              </div>
-            ) : (
-              <div
-                id="scenarios-list"
-                className="flex-1 overflow-y-auto space-y-2.5 pr-1 max-h-[560px]"
-              >
-                {scenarios.map((sc) => (
-                  <div
-                    key={sc.id}
-                    className="p-3.5 rounded-xl bg-gray-900/60 border border-gray-800 hover:border-indigo-500/40 transition-all group"
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono text-xs font-semibold text-indigo-300">
-                          {sc.id}
-                        </span>
-                        <span
-                          className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded-full border ${
-                            sc.archetype === "fast_pauser"
-                              ? "bg-sky-500/10 text-sky-400 border-sky-500/30"
-                              : sc.archetype === "slow_pauser"
-                              ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                              : "bg-purple-500/10 text-purple-400 border-purple-500/30"
-                          }`}
-                        >
-                          {sc.archetype.replace("_", " ")}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-1 text-[11px] text-gray-400">
-                        <Clock className="w-3 h-3 text-gray-500" />
-                        <span>{sc.true_end_time_ms} ms</span>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-gray-300 italic group-hover:text-white transition-colors line-clamp-2">
-                      &ldquo;{sc.text_preview}&rdquo;
-                    </p>
-
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-800/60 text-[10px] text-gray-400">
-                      <span>User: <strong className="text-gray-300">{sc.user_id}</strong></span>
-                      <span>Category: <strong className="text-gray-300">{sc.category}</strong></span>
-                      <span>
-                        Turn:{" "}
-                        <strong
-                          className={
-                            sc.is_turn_complete
-                              ? "text-emerald-400"
-                              : "text-amber-400"
-                          }
-                        >
-                          {sc.is_turn_complete ? "Complete" : "Mid-thought"}
-                        </strong>
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                <div className="flex items-center gap-6 font-mono text-[11px]">
+                  <span>
+                    Fixed Cut-ins: <strong className="text-rose-400 font-bold">{demoSetTally.fixedInterrupted}</strong>
+                  </span>
+                  <span>
+                    Patient Listener Cut-ins: <strong className="text-emerald-400 font-bold">{demoSetTally.plInterrupted}</strong>
+                  </span>
+                  <span>
+                    Fixed Mean Delay:{" "}
+                    <strong className="text-slate-100 font-bold">
+                      {demoSetTally.fixedDelays.length > 0
+                        ? Math.round(demoSetTally.fixedDelays.reduce((a, b) => a + b, 0) / demoSetTally.fixedDelays.length)
+                        : 0}{" "}
+                      ms
+                    </strong>
+                  </span>
+                  <span>
+                    PL Mean Delay:{" "}
+                    <strong className="text-slate-100 font-bold">
+                      {demoSetTally.plDelays.length > 0
+                        ? Math.round(demoSetTally.plDelays.reduce((a, b) => a + b, 0) / demoSetTally.plDelays.length)
+                        : 0}{" "}
+                      ms
+                    </strong>
+                  </span>
+                </div>
               </div>
             )}
+
+            {/* Error Banner */}
+            {replayError && (
+              <div className="p-4 bg-rose-950/80 border border-rose-500 rounded-xl text-rose-200 text-xs flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{replayError}</span>
+                </div>
+                <button
+                  onClick={() => setReplayError(null)}
+                  className="text-xs text-rose-400 hover:text-rose-200 underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {/* Selected Scenario Metadata Card */}
+            {selectedScenario && (
+              <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between text-xs text-slate-300">
+                <div className="flex items-center gap-4">
+                  <span>
+                    <strong className="text-slate-400 font-normal">Persona:</strong>{" "}
+                    <span className="font-semibold text-indigo-300">{selectedScenario.persona}</span>
+                  </span>
+                  <span>
+                    <strong className="text-slate-400 font-normal">Speaker:</strong>{" "}
+                    <span className="font-mono text-slate-200">{selectedScenario.user}</span>
+                  </span>
+                  <span>
+                    <strong className="text-slate-400 font-normal">Category:</strong>{" "}
+                    <span className="capitalize text-slate-200">{selectedScenario.category}</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-slate-400 text-[11px]">
+                  <span>
+                    True speech end: <strong className="text-amber-300">{Math.round(selectedScenario.true_end_t_ms)} ms</strong>
+                  </span>
+                  <span>
+                    Pause silence: <strong className="text-slate-200">{Math.round(selectedScenario.silence_ms)} ms</strong>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Side-by-Side Dual Engine Comparison Panels */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Panel: Fixed 800ms Timeout */}
+              <div
+                className={`bg-slate-900/90 border rounded-xl p-5 shadow-xl flex flex-col justify-between transition-all ${
+                  fixedState.interrupted
+                    ? "border-rose-500/80 ring-1 ring-rose-500/40"
+                    : "border-slate-700/80"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                    <div>
+                      <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        Fixed 800 ms Timeout
+                        {fixedState.interrupted && (
+                          <span className="px-2 py-0.5 rounded bg-rose-600 text-white font-bold text-[10px] tracking-wider uppercase animate-pulse">
+                            INTERRUPTED
+                          </span>
+                        )}
+                      </h2>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Static timeout baseline: cuts in after 800 ms of silence regardless of sentence completion
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Transcript Display Box */}
+                  <div className="mb-4">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
+                      Live Spoken Audio Transcript
+                    </span>
+                    <div className="bg-slate-950 rounded-lg p-3 min-h-[90px] border border-slate-800/80 text-sm leading-relaxed font-sans text-slate-200">
+                      {transcript || (
+                        <span className="text-slate-600 italic">Waiting for speech input...</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Live Silence Bar */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                      <span>Live Pause Silence Duration</span>
+                      <span className="font-mono text-slate-200">{Math.round(currentSilenceMs)} ms / 800 ms threshold</span>
+                    </div>
+                    <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 relative">
+                      <div
+                        className={`h-full transition-all duration-100 ${
+                          currentSilenceMs >= 800 ? "bg-rose-500" : "bg-amber-400"
+                        }`}
+                        style={{ width: `${Math.min(100, (currentSilenceMs / 800) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Engine Action Marker */}
+                  <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800/60 text-xs">
+                    {fixedState.responded ? (
+                      <div className="flex items-center gap-2 text-rose-300 font-medium">
+                        <AlertTriangle className="w-4 h-4 text-rose-400" />
+                        <span>
+                          Assistant started replying at <strong>{Math.round(fixedState.respondedAtMs ?? 0)} ms</strong>
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 text-xs italic">
+                        {isRunning ? "Listening for speech pause..." : "Idle"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Left Panel Final Result Box */}
+                <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-slate-400">Interrupted mid-thought: </span>
+                    {fixedState.interrupted === null ? (
+                      <span className="text-slate-500">—</span>
+                    ) : fixedState.interrupted ? (
+                      <strong className="text-rose-400">YES (Cut user off)</strong>
+                    ) : (
+                      <strong className="text-emerald-400">NO</strong>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Delay after true end: </span>
+                    <strong className="text-slate-200">
+                      {fixedState.responseDelayMs !== null ? `${Math.round(fixedState.responseDelayMs)} ms` : "—"}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Panel: Patient Listener (Decider 2B) */}
+              <div
+                className={`bg-slate-900/90 border rounded-xl p-5 shadow-xl flex flex-col justify-between transition-all ${
+                  plState.responded && !plState.interrupted
+                    ? "border-emerald-500/80 ring-1 ring-emerald-500/40"
+                    : "border-slate-700/80"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                    <div>
+                      <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        Patient Listener (Decider 2B)
+                        {plState.responded && !plState.interrupted && (
+                          <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[10px] tracking-wider uppercase">
+                            PATIENT WAIT
+                          </span>
+                        )}
+                        {plState.interrupted && (
+                          <span className="px-2 py-0.5 rounded bg-rose-600 text-white font-bold text-[10px] tracking-wider uppercase">
+                            INTERRUPTED
+                          </span>
+                        )}
+                      </h2>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Speculative System One decider: analyzes linguistic completion during pause checkpoints
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Transcript Display Box */}
+                  <div className="mb-4">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
+                      Live Spoken Audio Transcript
+                    </span>
+                    <div className="bg-slate-950 rounded-lg p-3 min-h-[90px] border border-slate-800/80 text-sm leading-relaxed font-sans text-slate-200">
+                      {transcript || (
+                        <span className="text-slate-600 italic">Waiting for speech input...</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Live Silence Bar */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                      <span>Silence Duration & Checkpoints</span>
+                      <span className="font-mono text-slate-200">{Math.round(currentSilenceMs)} ms / 2200 ms max</span>
+                    </div>
+                    <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 relative">
+                      <div
+                        className="h-full bg-emerald-400 transition-all duration-100"
+                        style={{ width: `${Math.min(100, (currentSilenceMs / 2200) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Decision Checkpoint Stream Feed */}
+                  <div className="mb-3">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1.5 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                      Speculative Checkpoint Decision Feed
+                    </span>
+                    <div className="bg-slate-950 rounded-lg p-2.5 max-h-[110px] overflow-y-auto border border-slate-800/80 space-y-1.5 font-mono text-[11px]">
+                      {decisionsFeed.length === 0 ? (
+                        <div className="text-slate-600 italic py-2 text-center font-sans">
+                          No decision checkpoints triggered yet
+                        </div>
+                      ) : (
+                        decisionsFeed.map((df, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between px-2 py-1 bg-slate-900/60 rounded border border-slate-800/60"
+                          >
+                            <span className="text-indigo-300">cp: {df.checkpointMs}ms</span>
+                            <span
+                              className={`font-bold px-1.5 py-0.2 rounded text-[10px] ${
+                                df.action === "WAIT"
+                                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                  : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              }`}
+                            >
+                              {df.action}
+                            </span>
+                            <span className="text-slate-400">p(done): {(df.pDone * 100).toFixed(0)}%</span>
+                            <span className="text-slate-500 text-[10px]">lat: {df.latencyMs.toFixed(0)}ms</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Engine Action Marker */}
+                  <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800/60 text-xs">
+                    {plState.responded ? (
+                      <div className="flex items-center gap-2 text-emerald-300 font-medium">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>
+                          Assistant started replying at <strong>{Math.round(plState.respondedAtMs ?? 0)} ms</strong>
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 text-xs italic">
+                        {isRunning ? "Evaluating speculative pause checkpoints..." : "Idle"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Panel Final Result Box */}
+                <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-slate-400">Interrupted mid-thought: </span>
+                    {plState.interrupted === null ? (
+                      <span className="text-slate-500">—</span>
+                    ) : plState.interrupted ? (
+                      <strong className="text-rose-400">YES</strong>
+                    ) : (
+                      <strong className="text-emerald-400">NO (Patiently waited)</strong>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Delay after true end: </span>
+                    <strong className="text-slate-200">
+                      {plState.responseDelayMs !== null ? `${Math.round(plState.responseDelayMs)} ms` : "—"}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Shared Visual Timeline Strip */}
+            <ReplayTimeline
+              speechSegments={speechSegments}
+              trueEndTimeMs={selectedScenario?.true_end_t_ms ?? 0}
+              currentTimeMs={currentTimeMs}
+              fixedResult={{
+                respondedAtMs: fixedState.respondedAtMs,
+                interrupted: fixedState.interrupted,
+                responseDelayMs: fixedState.responseDelayMs,
+              }}
+              plResult={{
+                respondedAtMs: plState.respondedAtMs,
+                interrupted: plState.interrupted,
+                responseDelayMs: plState.responseDelayMs,
+              }}
+            />
           </div>
-        </section>
+        )}
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-800/80 py-4 px-6 text-center text-xs text-slate-500">
+        Patient Listener — System One Voice Conversational Turn-Taking Benchmark Demo
+      </footer>
     </div>
   );
 };

@@ -22,7 +22,7 @@
 | E2 | Real cache validation and archive | BLOCKED | 2026-10-22 |
 | E3 | Real Decider evaluation | TODO | |
 | F2 | Live view | TODO | |
-| F3 | Side-by-side demo mode | TODO | |
+| F3 | Side-by-side demo mode | DOING | 2026-10-22 |
 | F4 | Profile + regret UI | TODO | |
 | F5 | Results dashboard + polish | TODO | |
 | R1 | Ship (submission bundle & docs) | TODO | |
@@ -1257,6 +1257,37 @@
 - **Blocker**: `backend/eval/data/decisions_cache_real.jsonl` does not exist on disk or within the repository workspace.
 - **Rule Enforced**: Per protocol ("The deduped real cache is at backend/eval/data/decisions_cache_real.jsonl. If it is missing, STOP with BLOCKED. Never substitute the mock cache"), execution is halted. The mock cache is strictly never substituted for the real evaluation.
 - **Next Action**: Copy the completed GPU-precomputed `decisions_cache_real.jsonl` into `backend/eval/data/` to unblock Step E2 validation and Step E3 real evaluation.
+
+## Step F3 — PLAN
+- **Goal**: Implement the side-by-side replay demo mode (the hero of the demo video) and a slim results dashboard in React + TypeScript + Tailwind. Ensure UI strictly alerts on mock provenance ("MOCK-DECIDER, not valid for the demo") and refuses to look like a valid demo until the real cache is installed.
+- **Approach**:
+  1. Backend routes:
+     - Update `GET /scenarios` in `backend/app/main.py`: return `id`, `user`, `persona`, `text_preview`, `true_end_t_ms`, and `demo` boolean flag (demo-flagged scenarios from `demo_scenarios.json` sorted first).
+     - Add `GET /plots/{name}` in `backend/app/main.py`: whitelist `results_pareto.png` and `results_reliability.png` and serve via `FileResponse`.
+  2. Frontend SSE Parser (`frontend/src/sse.ts`):
+     - Pure streaming parser consuming `ReadableStream<Uint8Array>` from `fetch("POST /replay/...")`.
+     - Parses line-buffered SSE chunks (`data: ...\n\n`), typed directly against `ReplayEvent`.
+  3. Frontend Architecture (`frontend/src/App.tsx` & components):
+     - Two tabs: "Demo" (active by default) and "Results".
+     - Header provenance indicator:
+       * If real: green badge "Decisions: real Strands Decider 2B (cached), decision latency 236 ms measured on Tesla T4".
+       * If mock: red full-width warning banner "MOCK-DECIDER, not valid for the demo".
+     - Demo view:
+       * Scenario selector (demo-flagged first, showing archetype, user, text preview).
+       * Replay speed controls (1x, 2x, 4x).
+       * Start and Cancel controls with `AbortController`.
+       * Two parallel comparison panels:
+         - Left: "Fixed 800 ms timeout" (transcript stream, live silence progress bar, interrupt badge, final stats).
+         - Right: "Patient Listener (Decider 2B)" (transcript stream, live silence bar, decision checkpoint feed with p_done/latency, final stats).
+       * Shared unified timeline strip rendering speech blocks, pauses, true end time, and both engines' response points.
+       * Post-run outcome summary banner.
+       * Sequential "Play demo set" runner with tally of interruptions and mean delay.
+     - Results view:
+       * Consumes `GET /results`.
+       * Headline metrics table with Cluster 95% CIs and Wilson CIs.
+       * Labeled reference ceilings.
+       * Dual PNG plots fetched from `GET /plots/results_pareto.png` and `GET /plots/results_reliability.png`.
+       * Clear provenance and synthetic data caveats.
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.

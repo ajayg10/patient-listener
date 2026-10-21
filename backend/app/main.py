@@ -315,44 +315,62 @@ def build_dual_engine_timeline(
 
 @app.get("/scenarios")
 def list_scenarios() -> list[dict[str, Any]]:
-    """Lists demo scenarios (id, user, persona, text preview, true end time)."""
+    """Lists demo scenarios (id, user, persona, text preview, true end t_ms, demo flag)."""
     repo_root = Path(__file__).resolve().parent.parent.parent
     demo_file = Path(cfg.demo_scenarios_path)
     if not demo_file.is_absolute():
         demo_file = repo_root / demo_file
 
+    demo_ids: set[str] = set()
+    demo_scenarios: list[dict[str, Any]] = []
     if demo_file.exists():
         try:
             with open(demo_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 scenarios = data.get("scenarios", [])
-                if scenarios:
-                    return scenarios
+                for s in scenarios:
+                    sid = s["id"]
+                    demo_ids.add(sid)
+                    t_end = float(s.get("true_end_time", s.get("true_end_t_ms", 0.0)))
+                    demo_scenarios.append({
+                        "id": sid,
+                        "user": s.get("user") or s.get("user_id", ""),
+                        "persona": s.get("persona") or s.get("archetype", ""),
+                        "text_preview": s.get("text_preview") or s.get("full_text") or s.get("text", ""),
+                        "true_end_t_ms": t_end,
+                        "true_end_time": t_end,
+                        "silence_ms": float(s.get("silence_ms", 0.0)),
+                        "category": s.get("category", ""),
+                        "demo": True,
+                    })
         except Exception as e:
             logger.warning(f"Failed to read demo_scenarios file: {e}")
 
-    # Fallback to scanning test_turns.jsonl
+    # Also load from test_turns.jsonl for complete catalog
     test_file = repo_root / "backend" / "eval" / "data" / "test_turns.jsonl"
-    if not test_file.exists():
-        return []
+    other_scenarios: list[dict[str, Any]] = []
+    if test_file.exists():
+        with open(test_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    t = json.loads(line)
+                    sid = t["id"]
+                    if sid in demo_ids:
+                        continue
+                    t_end = float(t.get("turn_end_t", 0.0))
+                    other_scenarios.append({
+                        "id": sid,
+                        "user": t.get("user_id", ""),
+                        "persona": t.get("archetype") or t.get("persona_id", ""),
+                        "text_preview": t.get("full_text") or t.get("text", ""),
+                        "true_end_t_ms": t_end,
+                        "true_end_time": t_end,
+                        "silence_ms": float(t.get("silence_ms", 0.0)),
+                        "category": t.get("category", ""),
+                        "demo": False,
+                    })
 
-    results = []
-    with open(test_file, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                t = json.loads(line)
-                results.append({
-                    "id": t["id"],
-                    "user": t.get("user_id", ""),
-                    "persona": t.get("archetype") or t.get("persona_id", ""),
-                    "text_preview": t.get("full_text") or t.get("text", ""),
-                    "true_end_time": t.get("turn_end_t", 0.0),
-                    "silence_ms": t.get("silence_ms", 0.0),
-                    "category": t.get("category", ""),
-                })
-                if len(results) >= 20:
-                    break
-    return results
+    return demo_scenarios + other_scenarios
 
 
 @app.post("/replay/{scenario}")
