@@ -19,7 +19,7 @@
 | B9 | API | DONE | 2026-10-19 |
 | F1 | Frontend scaffold + WS client | DONE | 2026-10-21 |
 | E1 | run_eval speed optimization | DONE | 2026-10-21 |
-| E2 | Real cache validation and archive | TODO | |
+| E2 | Real cache validation and archive | BLOCKED | 2026-10-22 |
 | E3 | Real Decider evaluation | TODO | |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | TODO | |
@@ -1251,6 +1251,12 @@
   * **Total Evaluation Time**: **1.76 seconds**
 - **Progress note (perf commit)**: Vectorized cluster bootstrap with 2D numpy binomial sampling and memoized DEV calibration, accelerating full mock evaluation from 6h 53m to 1.76s.
 - **Progress note (bedrock commit)**: Isolated Bedrock judge behind --with-judge (default SKIPPED), configured boto3 client with strict timeouts (connect 3s, read 10s, max 1 attempt).
+
+## Step E2 — BLOCKED
+- **Status**: BLOCKED (2026-10-22)
+- **Blocker**: `backend/eval/data/decisions_cache_real.jsonl` does not exist on disk or within the repository workspace.
+- **Rule Enforced**: Per protocol ("The deduped real cache is at backend/eval/data/decisions_cache_real.jsonl. If it is missing, STOP with BLOCKED. Never substitute the mock cache"), execution is halted. The mock cache is strictly never substituted for the real evaluation.
+- **Next Action**: Copy the completed GPU-precomputed `decisions_cache_real.jsonl` into `backend/eval/data/` to unblock Step E2 validation and Step E3 real evaluation.
 
 ## Article material (running list)
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
