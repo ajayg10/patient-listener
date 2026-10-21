@@ -1389,6 +1389,7 @@
   * Updated `results.md` programmatically from `eval_results.json`.
 
 ## Article material (running list)
+- **Progress note (feat: pick demo scenarios from real cache)**: Selected 10 balanced demo scenarios (5 slow_pauser, 5 filler_heavy) from 68 qualifying cases on real Tesla T4 cache.
 - **Progress note (docs: record real decider results and findings)**: Documented real decider benchmark findings, paired bootstrap differences, and latency observations in results.md and NOTES.md.
 - Tesla T4 GPU decision latency: The cache-measured median latency across full evaluation states is 301.2 ms (p95 306.7 ms), compared to the synthetic 20-150 token benchmark median of 235.6 ms reported by bench_decider.py on a T4. The cause of this discrepancy is not established; we report measured numbers without guessing.
 - Plain language finding on Decider vs heuristic / control trade-off: The real 2B Decider prioritizes avoiding premature interruptions (0.0% cut-ins across all personas and categories), successfully protecting conversational comfort. However, because its predicted probability p(RESPOND) during mid-thought pauses rarely crosses the hi threshold (0.55), the policy holds until max_hold_ms (2200 ms), yielding response delay P50 of 2200 ms. Consequently, the Decider does not beat the text heuristic (250 ms delay) or per-user control (707 ms delay) on speed.

@@ -124,9 +124,30 @@ def pick_demo_scenarios(
                 "category": t.get("category"),
             })
 
-    logger.info(f"Found {len(picks)} qualifying scenarios where Fixed interrupts and Patient Listener waits.")
+    persona_counts: dict[str, int] = {}
+    for p in picks:
+        pers = str(p.get("persona", "unknown"))
+        persona_counts[pers] = persona_counts.get(pers, 0) + 1
 
-    selected_picks = picks[:max_picks]
+    logger.info(f"Found {len(picks)} qualifying scenarios where Fixed interrupts and Patient Listener waits.")
+    for pers, cnt in sorted(persona_counts.items()):
+        logger.info(f"  - {pers}: {cnt} qualifying scenarios")
+    if "fast_pauser" not in persona_counts:
+        logger.info("  - fast_pauser: 0 qualifying scenarios (fast pausers naturally pause < 800 ms on incomplete turns)")
+
+    # Interleave picks across available personas for a balanced demo set
+    by_persona: dict[str, list[dict[str, Any]]] = {}
+    for p in picks:
+        by_persona.setdefault(str(p.get("persona", "unknown")), []).append(p)
+
+    selected_picks: list[dict[str, Any]] = []
+    active_keys = sorted(by_persona.keys())
+    idx = 0
+    while len(selected_picks) < max_picks and any(idx < len(by_persona[k]) for k in active_keys):
+        for k in active_keys:
+            if idx < len(by_persona[k]) and len(selected_picks) < max_picks:
+                selected_picks.append(by_persona[k][idx])
+        idx += 1
 
     result_data = {
         "provenance": {
