@@ -24,6 +24,7 @@ hf-cache/
 # Evaluation results and data artifacts
 backend/eval/results/
 !backend/eval/results/.gitkeep
+backend/eval/data/decisions_cache_real.jsonl
 
 # Database & Regret Log
 *.db

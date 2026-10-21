@@ -11,6 +11,7 @@ Enforces:
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -63,9 +64,24 @@ def compute_cache_key(model_id: str, question_id: str, state_text: str) -> str:
 
 def load_cache(cache_path: Path | None = None) -> dict[str, dict[str, Any]]:
     path = cache_path or CACHE_PATH
+    if isinstance(path, str):
+        path = Path(path)
+
+    # If the plain file does not exist, check for .gz archive
+    if not path.exists():
+        gz_cand = Path(str(path) + ".gz")
+        if gz_cand.exists():
+            path = gz_cand
+        elif path.suffix == ".jsonl":
+            alt_gz = path.with_suffix(".jsonl.gz")
+            if alt_gz.exists():
+                path = alt_gz
+
     cache: dict[str, dict[str, Any]] = {}
     if path.exists():
-        with open(path, "r", encoding="utf-8") as f:
+        is_gz = path.suffix == ".gz" or str(path).endswith(".jsonl.gz")
+        open_fn = gzip.open if is_gz else open
+        with open_fn(path, "rt", encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     item = json.loads(line)

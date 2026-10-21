@@ -1,0 +1,104 @@
+{
+  "backend": "local",
+  "model_id": "StrandsAgents/strands-decider-2B-hobson-v19",
+  "unique_keys_total": 8450,
+  "total_records_processed": 8450,
+  "hardware": "Tesla T4 (Google Colab free tier)",
+  "single_process": true,
+  "date": "2026-10-21",
+  "sha256": "62e85524a69fa3946f86563a37d9df9feceaceb16aded35e73747f3a968b5d14",
+  "reference_kernels": {
+    "causal_conv1d": "missing",
+    "flash_linear_attention": "missing",
+    "execution_path": "PyTorch reference kernels on Tesla T4"
+  },
+  "latency_statistics": {
+    "overall_median_ms": 301.19,
+    "overall_p95_ms": 306.66,
+    "by_question": {
+      "mid_thought": {
+        "median_ms": 299.79,
+        "p95_ms": 304.9,
+        "count": 4225
+      },
+      "turn_complete": {
+        "median_ms": 303.01,
+        "p95_ms": 307.35,
+        "count": 4225
+      }
+    },
+    "by_checkpoint": {
+      "250": {
+        "median_ms": 300.94,
+        "p95_ms": 306.82,
+        "count": 1674
+      },
+      "500": {
+        "median_ms": 301.05,
+        "p95_ms": 306.67,
+        "count": 1678
+      },
+      "600": {
+        "median_ms": 204.44,
+        "p95_ms": 206.88,
+        "count": 10
+      },
+      "650": {
+        "median_ms": 204.63,
+        "p95_ms": 206.38,
+        "count": 6
+      },
+      "700": {
+        "median_ms": 203.36,
+        "p95_ms": 205.14,
+        "count": 10
+      },
+      "750": {
+        "median_ms": 204.73,
+        "p95_ms": 207.76,
+        "count": 10
+      },
+      "800": {
+        "median_ms": 301.19,
+        "p95_ms": 306.41,
+        "count": 1692
+      },
+      "850": {
+        "median_ms": 205.53,
+        "p95_ms": 208.49,
+        "count": 10
+      },
+      "900": {
+        "median_ms": 205.49,
+        "p95_ms": 208.21,
+        "count": 6
+      },
+      "950": {
+        "median_ms": 205.3,
+        "p95_ms": 206.82,
+        "count": 2
+      },
+      "1100": {
+        "median_ms": 206.28,
+        "p95_ms": 207.27,
+        "count": 2
+      },
+      "1200": {
+        "median_ms": 301.42,
+        "p95_ms": 306.52,
+        "count": 1676
+      },
+      "1800": {
+        "median_ms": 301.49,
+        "p95_ms": 306.83,
+        "count": 1674
+      }
+    },
+    "sample_count": 8450
+  },
+  "duplicate_analysis": {
+    "duplicate_keys_count": 0,
+    "max_probability_difference": 0.0
+  },
+  "notes": "Single-process precompute on Tesla T4 GPU; latency_ms is clean and uncontaminated."
+}

@@ -19,7 +19,7 @@
 | B9 | API | DONE | 2026-10-19 |
 | F1 | Frontend scaffold + WS client | DONE | 2026-10-21 |
 | E1 | run_eval speed optimization | DONE | 2026-10-21 |
-| E2 | Real cache validation and archive | BLOCKED | 2026-10-22 |
+| E2 | Real cache validation and archive | DOING | 2026-10-22 |
 | E3 | Real Decider evaluation | TODO | |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | DONE | 2026-10-22 |
@@ -1252,11 +1252,20 @@
 - **Progress note (perf commit)**: Vectorized cluster bootstrap with 2D numpy binomial sampling and memoized DEV calibration, accelerating full mock evaluation from 6h 53m to 1.76s.
 - **Progress note (bedrock commit)**: Isolated Bedrock judge behind --with-judge (default SKIPPED), configured boto3 client with strict timeouts (connect 3s, read 10s, max 1 attempt).
 
-## Step E2 — BLOCKED
-- **Status**: BLOCKED (2026-10-22)
-- **Blocker**: `backend/eval/data/decisions_cache_real.jsonl` does not exist on disk or within the repository workspace.
-- **Rule Enforced**: Per protocol ("The deduped real cache is at backend/eval/data/decisions_cache_real.jsonl. If it is missing, STOP with BLOCKED. Never substitute the mock cache"), execution is halted. The mock cache is strictly never substituted for the real evaluation.
-- **Next Action**: Copy the completed GPU-precomputed `decisions_cache_real.jsonl` into `backend/eval/data/` to unblock Step E2 validation and Step E3 real evaluation.
+## Step E2 — PLAN
+- **Goal**: Validate the real precomputed GPU decisions cache (`backend/eval/data/decisions_cache_real.jsonl`), compute exhaustive latency distributions on Tesla T4, export formal provenance, archive as a compressed gzip artifact (`decisions_cache_real.jsonl.gz` < 2 MB), and update loaders to support transparent `.gz` decompression.
+- **Approach**:
+  1. Verify existence of `backend/eval/data/decisions_cache_real.jsonl` (confirmed present via `Test-Path`).
+  2. Implement `scripts/validate_cache.py`:
+     - Validate every record format: valid JSON, `backend == 'local'`, `model_id == 'StrandsAgents/strands-decider-2B-hobson-v19'`, zero mock markers.
+     - Match keys against canonical enumeration from `precompute_decisions.py --enumerate` (expected 8450 unique states).
+     - Check duplicate records: measure max probability discrepancy across duplicate keys, deduplicate keeping one record.
+     - Assert complete coverage: if any required key is missing, break down missing count by question and checkpoint, and abort.
+     - Compute exact latency metrics from single-process T4 records: median and p95 overall, per question (`turn_complete`, `mid_thought`), and per checkpoint.
+     - Write structured provenance JSON `backend/eval/data/decisions_cache_real_provenance.json`.
+  3. Update cache loaders (`load_cache` in `scripts/precompute_decisions.py` and `backend/app/main.py`) to transparently load `.jsonl.gz` when plain `.jsonl` is missing.
+  4. Deduplicate and compress `decisions_cache_real.jsonl` into `decisions_cache_real.jsonl.gz`, assert size < 2 MB, and add plain `.jsonl` to `.gitignore`.
+  5. Commit `feat: add cache validation and provenance` and `chore: add real decision cache archive`.
 
 ## Step F3 — PLAN
 - **Goal**: Implement the side-by-side replay demo mode (the hero of the demo video) and a slim results dashboard in React + TypeScript + Tailwind. Ensure UI strictly alerts on mock provenance ("MOCK-DECIDER, not valid for the demo") and refuses to look like a valid demo until the real cache is installed.
@@ -1321,6 +1330,7 @@
 - **Progress note (feat: add side-by-side replay demo)**: Implemented side-by-side replay demo with pure SSE parser, dual engine stream panels, shared timeline strip, speed controls, AbortController cancellation, and mock-decider alert banner.
 - **Progress note (feat: add results page and plot endpoint)**: Added GET /plots/{name} endpoint for Pareto and reliability curves, and built slim ResultsDashboard rendering Cluster 95% CIs, labeled ceilings, and synthetic data caveats.
 - **Progress note (docs: add demo run steps)**: Documented manual demo execution steps in frontend/README.md and recorded Step F3 completion in NOTES.md.
+- **Progress note (feat: add cache validation and provenance)**: Validated 8450 real T4 decision keys with zero missing and zero discrepancies, recorded Tesla T4 latency stats (median 301.19 ms, p95 306.66 ms), and exported decisions_cache_real_provenance.json.
 - Running local 2B decision models on consumer CPU (AMD Ryzen 5 5500U): evaluating feasibility for real-time turn-taking where voice latency budgets are ~200-500 ms.
 - Real-world setup failure & fix: `hf-xet` (Rust background writer in `huggingface_hub`) fails on Windows with `File reconstruction error: Internal Writer Error: Background writer channel closed`. Removing `hf-xet` to force standard HTTP chunked download completely resolves the stall without requiring special toolchains.
 - Large weight download stability: Downloading monolithic 4.5 GB safetensors files over consumer connections can encounter TCP resets; using resumable chunked downloads (`curl.exe -C - --retry 8 --retry-all-errors`) is essential to prevent restarting from 0 bytes.

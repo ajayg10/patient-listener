@@ -13,6 +13,7 @@ Exposes:
 from __future__ import annotations
 
 import asyncio
+import gzip
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -398,7 +399,7 @@ async def replay_scenario(scenario: str, request: Request, speed: float = 1.0) -
     if not cache_file.is_absolute():
         cache_file = repo_root / cache_file
 
-    cache = load_cache(cache_file) if cache_file.exists() else {}
+    cache = load_cache(cache_file)
 
     sample_entry = next(iter(cache.values())) if cache else {}
     backend = sample_entry.get("backend", "mock")
@@ -531,14 +532,25 @@ def health_status() -> dict[str, Any]:
 
     cache_backend = "unknown"
     cache_keys = 0
+    if not cache_file.exists():
+        gz_cand = Path(str(cache_file) + ".gz")
+        if gz_cand.exists():
+            cache_file = gz_cand
+        elif cache_file.suffix == ".jsonl":
+            alt_gz = cache_file.with_suffix(".jsonl.gz")
+            if alt_gz.exists():
+                cache_file = alt_gz
+
     if cache_file.exists():
         try:
-            with open(cache_file, "r", encoding="utf-8") as f:
+            is_gz = cache_file.suffix == ".gz" or str(cache_file).endswith(".jsonl.gz")
+            open_fn = gzip.open if is_gz else open
+            with open_fn(cache_file, "rt", encoding="utf-8") as f:
                 first_line = f.readline()
                 if first_line.strip():
                     item = json.loads(first_line)
                     cache_backend = item.get("backend", "mock")
-            with open(cache_file, "r", encoding="utf-8") as f:
+            with open_fn(cache_file, "rt", encoding="utf-8") as f:
                 cache_keys = sum(1 for line in f if line.strip())
         except Exception:
             pass
