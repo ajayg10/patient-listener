@@ -808,6 +808,7 @@ export const App: React.FC = () => {
                 interrupted: plState.interrupted,
                 responseDelayMs: plState.responseDelayMs,
               }}
+              streamError={replayError}
             />
           </div>
         )}

@@ -1,5 +1,6 @@
 import React from "react";
 import { Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { formatResultLine } from "./resultLine";
 
 export interface SpeechSegment {
   startMs: number;
@@ -19,6 +20,7 @@ interface ReplayTimelineProps {
   currentTimeMs: number;
   fixedResult: EngineResult;
   plResult: EngineResult;
+  streamError?: string | null;
 }
 
 export const ReplayTimeline: React.FC<ReplayTimelineProps> = ({
@@ -27,6 +29,7 @@ export const ReplayTimeline: React.FC<ReplayTimelineProps> = ({
   currentTimeMs,
   fixedResult,
   plResult,
+  streamError,
 }) => {
   // Determine timeline boundary
   const allTimes = [
@@ -184,21 +187,41 @@ export const ReplayTimeline: React.FC<ReplayTimelineProps> = ({
               </span>
             ) : null}
 
-            {plResult.interrupted ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-medium">
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                Patient Listener interrupted at {Math.round(plResult.respondedAtMs ?? 0)} ms
-              </span>
-            ) : plResult.respondedAtMs !== null ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                Patient Listener waited and answered +{Math.round(plResult.responseDelayMs ?? 0)} ms after true end
-              </span>
-            ) : null}
+            {(() => {
+              const resLine = formatResultLine({
+                interrupted: plResult.interrupted,
+                responseDelayMs: plResult.responseDelayMs,
+                respondedAtMs: plResult.respondedAtMs,
+                hasResponse: plResult.respondedAtMs !== null,
+                streamError: streamError,
+              });
+              const isSuccess = plResult.respondedAtMs !== null && plResult.interrupted === false && !streamError;
+              const isError = Boolean(streamError);
+              const isCutIn = plResult.interrupted === true;
+
+              return (
+                <span
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-medium ${
+                    isSuccess
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : isCutIn || isError
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                      : "bg-slate-800 text-slate-400 border border-slate-700"
+                  }`}
+                >
+                  {isSuccess ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  )}
+                  {resLine}
+                </span>
+              );
+            })()}
           </div>
 
           <div className="text-slate-400 text-[11px]">
-            {fixedResult.interrupted && !plResult.interrupted && (
+            {fixedResult.interrupted && !plResult.interrupted && !streamError && plResult.respondedAtMs !== null && (
               <span className="text-emerald-400 font-semibold">
                 ✓ Patient Listener successfully prevented premature cutoff.
               </span>
