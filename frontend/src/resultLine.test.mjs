@@ -65,3 +65,38 @@ test("Case 3b: No response event occurred", () => {
   assert.equal(result, "Patient Listener produced no answer");
   assert.ok(!result.includes("waited and answered"));
 });
+
+function formatDelayLine(respondedAtMs, trueEndMs) {
+  if (respondedAtMs === null || respondedAtMs === undefined) {
+    return "no answer";
+  }
+
+  if (trueEndMs !== null && trueEndMs !== undefined) {
+    if (respondedAtMs < trueEndMs) {
+      const diff = Math.round(trueEndMs - respondedAtMs);
+      return `answered ${diff} ms before the user finished`;
+    }
+    const diff = Math.round(respondedAtMs - trueEndMs);
+    return `answered ${diff} ms after the true end`;
+  }
+
+  return `${Math.round(respondedAtMs)} ms`;
+}
+
+test("formatDelayLine: answered before the user finished", () => {
+  // e.g. true end at 4500ms, engine interrupted at 800ms
+  const line = formatDelayLine(800, 4500);
+  assert.equal(line, "answered 3700 ms before the user finished");
+});
+
+test("formatDelayLine: answered after the true end", () => {
+  // e.g. true end at 3500ms, engine responded at 4051ms
+  const line = formatDelayLine(4051, 3500);
+  assert.equal(line, "answered 551 ms after the true end");
+});
+
+test("formatDelayLine: no response", () => {
+  assert.equal(formatDelayLine(null, 3500), "no answer");
+  assert.equal(formatDelayLine(undefined, 3500), "no answer");
+});
+

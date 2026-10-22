@@ -15,6 +15,7 @@ import type { HealthResponse, ReplayEvent, ScenarioItem } from "./events";
 import { parseSSEStream } from "./sse";
 import { ReplayTimeline, type SpeechSegment } from "./ReplayTimeline";
 import { ResultsDashboard } from "./ResultsDashboard";
+import { formatDelayLine } from "./resultLine";
 
 interface DecisionEntry {
   checkpointMs: number;
@@ -655,9 +656,9 @@ export const App: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <span className="text-slate-400">Delay after true end: </span>
+                    <span className="text-slate-400">Response timing: </span>
                     <strong className="text-slate-200">
-                      {fixedState.responseDelayMs !== null ? `${Math.round(fixedState.responseDelayMs)} ms` : "—"}
+                      {formatDelayLine(fixedState.respondedAtMs, selectedScenario?.true_end_t_ms)}
                     </strong>
                   </div>
                 </div>
@@ -784,9 +785,9 @@ export const App: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <span className="text-slate-400">Delay after true end: </span>
+                    <span className="text-slate-400">Response timing: </span>
                     <strong className="text-slate-200">
-                      {plState.responseDelayMs !== null ? `${Math.round(plState.responseDelayMs)} ms` : "—"}
+                      {formatDelayLine(plState.respondedAtMs, selectedScenario?.true_end_t_ms)}
                     </strong>
                   </div>
                 </div>

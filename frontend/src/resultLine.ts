@@ -44,3 +44,34 @@ export function formatResultLine(ctx: FinalEventContext): string {
 
   return "Patient Listener produced no answer";
 }
+
+/**
+ * Formats engine response timing relative to the true end.
+ *
+ * If an engine responded before the true end:
+ *   "answered X ms before the user finished" (true end minus response time)
+ * If an engine responded after the true end:
+ *   "answered X ms after the true end"
+ * If no response:
+ *   "no answer"
+ */
+export function formatDelayLine(
+  respondedAtMs: number | null | undefined,
+  trueEndMs: number | null | undefined
+): string {
+  if (respondedAtMs === null || respondedAtMs === undefined) {
+    return "no answer";
+  }
+
+  if (trueEndMs !== null && trueEndMs !== undefined) {
+    if (respondedAtMs < trueEndMs) {
+      const diff = Math.round(trueEndMs - respondedAtMs);
+      return `answered ${diff} ms before the user finished`;
+    }
+    const diff = Math.round(respondedAtMs - trueEndMs);
+    return `answered ${diff} ms after the true end`;
+  }
+
+  return `${Math.round(respondedAtMs)} ms`;
+}
+
