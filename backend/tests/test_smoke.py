@@ -11,7 +11,7 @@ def test_config_loading():
     assert isinstance(cfg, AppConfig)
     assert cfg.turn_manager.checkpoints_ms == [250, 500, 800, 1200, 1800]
     assert cfg.turn_manager.max_wait_ms == 2200
-    assert cfg.policy.confidence_hi == 0.70
+    assert cfg.policy.confidence_hi == 0.30
     assert cfg.policy.confidence_lo == 0.30
     assert cfg.pace_profile.default_p50_ms == 650
     assert cfg.state_builder.max_recent_words == 40

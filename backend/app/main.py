@@ -600,6 +600,12 @@ def health_status() -> dict[str, Any]:
     return {
         "status": "healthy",
         "backend": cfg.decider_backend,
+        "policy": {
+            "hi": cfg.policy.confidence_hi,
+            "lo": cfg.policy.confidence_lo,
+            "operating_point": cfg.policy.operating_point,
+            "provenance": cfg.policy.operating_point_provenance,
+        },
         "cache_provenance": {
             "backend": cache_backend,
             "total_keys": cache_keys,

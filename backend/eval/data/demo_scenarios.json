@@ -4,90 +4,26 @@
     "model_id": "StrandsAgents/strands-decider-2B-hobson-v19",
     "total_cached_keys": 8450,
     "is_mock": false,
+    "operating_point": "Point A (Delay budget <= 800ms)",
+    "operating_point_provenance": "DEV-selected Point A: hi=0.30, lo=0.30 (DEV delay P50 <= 800ms, minimizing premature rate)",
+    "hi": 0.3,
+    "lo": 0.3,
+    "fixed_replay_timeout_ms": 800,
+    "decision_latency_ms": 301.2,
     "warning": null,
-    "note": "latency measured on Tesla T4, decisions from cache"
+    "note": "latency measured on Tesla T4, decisions from cache under Point A policy"
   },
   "scenarios": [
     {
-      "id": "turn_user_filler_test_01_tmpl_test_05_245",
-      "user": "user_filler_test_01",
+      "id": "turn_user_filler_test_06_tmpl_test_04_304",
+      "user": "user_filler_test_06",
       "persona": "filler_heavy",
-      "text_preview": "My new employer requires proof of immunization by Friday, and I need to verify the clinic faxed the paperwork.",
-      "true_end_time": 7481.0,
-      "silence_ms": 831.0,
-      "category": "incomplete"
-    },
-    {
-      "id": "turn_user_slow_test_01_tmpl_test_01_121",
-      "user": "user_slow_test_01",
-      "persona": "slow_pauser",
-      "text_preview": "I looked at my work calendar for Tuesday morning, but Tuesday afternoon would work much better for my schedule.",
-      "true_end_time": 7524.0,
-      "silence_ms": 874.0,
-      "category": "incomplete"
-    },
-    {
-      "id": "turn_user_filler_test_02_tmpl_test_02_254",
-      "user": "user_filler_test_02",
-      "persona": "filler_heavy",
-      "text_preview": "I handed my new insurance card to the receptionist, but I need to understand what portion of the charge I owe.",
-      "true_end_time": 8208.0,
-      "silence_ms": 858.0,
-      "category": "incomplete"
-    },
-    {
-      "id": "turn_user_slow_test_01_tmpl_test_02_122",
-      "user": "user_slow_test_01",
-      "persona": "slow_pauser",
-      "text_preview": "I handed my new insurance card to the receptionist, but I need to understand what portion of the charge I owe.",
-      "true_end_time": 8235.0,
-      "silence_ms": 885.0,
-      "category": "incomplete"
-    },
-    {
-      "id": "turn_user_filler_test_02_tmpl_test_05_257",
-      "user": "user_filler_test_02",
-      "persona": "filler_heavy",
-      "text_preview": "My new employer requires proof of immunization by Friday, and I need to verify the clinic faxed the paperwork.",
-      "true_end_time": 7509.0,
-      "silence_ms": 859.0,
-      "category": "incomplete"
-    },
-    {
-      "id": "turn_user_slow_test_01_tmpl_test_05_125",
-      "user": "user_slow_test_01",
-      "persona": "slow_pauser",
-      "text_preview": "Requesting immunization medical records copy I need to verify the clinic faxed the paperwork.",
-      "true_end_time": 5793.0,
-      "silence_ms": 893.0,
-      "category": "ambiguous"
-    },
-    {
-      "id": "turn_user_filler_test_03_tmpl_test_03_273",
-      "user": "user_filler_test_03",
-      "persona": "filler_heavy",
-      "text_preview": "Disputing an unexpected billing statement fee the billing statement listed an unexpected facility fee.",
-      "true_end_time": 5729.0,
-      "silence_ms": 829.0,
-      "category": "ambiguous"
-    },
-    {
-      "id": "turn_user_slow_test_01_tmpl_test_04_130",
-      "user": "user_slow_test_01",
-      "persona": "slow_pauser",
-      "text_preview": "Referral to cardiology department I haven't received any confirmation call from their office.",
-      "true_end_time": 5397.0,
-      "silence_ms": 847.0,
-      "category": "ambiguous"
-    },
-    {
-      "id": "turn_user_filler_test_03_tmpl_test_06_276",
-      "user": "user_filler_test_03",
-      "persona": "filler_heavy",
-      "text_preview": "Seeking advice for sprained ankle swelling the joint is still throbbing and painful this morning.",
-      "true_end_time": 6192.0,
-      "silence_ms": 942.0,
-      "category": "ambiguous"
+      "text_preview": "The physical therapist told me I need a specialist evaluation, and I haven't received any confirmation call from their office.",
+      "true_end_time": 7833.0,
+      "silence_ms": 833.0,
+      "category": "incomplete",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
     },
     {
       "id": "turn_user_slow_test_02_tmpl_test_01_139",
@@ -96,7 +32,97 @@
       "text_preview": "Dr. Evans said I should return in six weeks, and Tuesday afternoon would work much better for my schedule.",
       "true_end_time": 7479.0,
       "silence_ms": 829.0,
-      "category": "incomplete"
+      "category": "incomplete",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
+    },
+    {
+      "id": "turn_user_filler_test_06_tmpl_test_01_307",
+      "user": "user_filler_test_06",
+      "persona": "filler_heavy",
+      "text_preview": "Dr. Evans said I should return in six weeks, and Tuesday afternoon would work much better for my schedule.",
+      "true_end_time": 7748.0,
+      "silence_ms": 1098.0,
+      "category": "incomplete",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
+    },
+    {
+      "id": "turn_user_slow_test_03_tmpl_test_03_147",
+      "user": "user_slow_test_03",
+      "persona": "slow_pauser",
+      "text_preview": "I already paid fifty dollars at the time of service, and the billing statement listed an unexpected facility fee.",
+      "true_end_time": 7504.0,
+      "silence_ms": 854.0,
+      "category": "incomplete",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
+    },
+    {
+      "id": "turn_user_filler_test_07_tmpl_test_04_316",
+      "user": "user_filler_test_07",
+      "persona": "filler_heavy",
+      "text_preview": "Checking status on specialist referral authorization I haven't received any confirmation call from their office.",
+      "true_end_time": 6086.0,
+      "silence_ms": 836.0,
+      "category": "ambiguous",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
+    },
+    {
+      "id": "turn_user_slow_test_06_tmpl_test_03_183",
+      "user": "user_slow_test_06",
+      "persona": "slow_pauser",
+      "text_preview": "I already paid fifty dollars at the time of service, and the billing statement listed an unexpected facility fee.",
+      "true_end_time": 7536.0,
+      "silence_ms": 886.0,
+      "category": "incomplete",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
+    },
+    {
+      "id": "turn_user_filler_test_10_tmpl_test_01_355",
+      "user": "user_filler_test_10",
+      "persona": "filler_heavy",
+      "text_preview": "Dr. Evans said I should return in six weeks, and Tuesday afternoon would work much better for my schedule.",
+      "true_end_time": 7576.0,
+      "silence_ms": 926.0,
+      "category": "incomplete",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
+    },
+    {
+      "id": "turn_user_slow_test_06_tmpl_test_06_186",
+      "user": "user_slow_test_06",
+      "persona": "slow_pauser",
+      "text_preview": "The shortness of breath only happens when I climb stairs, and the joint is still throbbing and painful this morning.",
+      "true_end_time": 7830.0,
+      "silence_ms": 830.0,
+      "category": "incomplete",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
+    },
+    {
+      "id": "turn_user_slow_test_07_tmpl_test_04_196",
+      "user": "user_slow_test_07",
+      "persona": "slow_pauser",
+      "text_preview": "Checking status on specialist referral authorization I haven't received any confirmation call from their office.",
+      "true_end_time": 6094.0,
+      "silence_ms": 844.0,
+      "category": "ambiguous",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
+    },
+    {
+      "id": "turn_user_slow_test_08_tmpl_test_06_210",
+      "user": "user_slow_test_08",
+      "persona": "slow_pauser",
+      "text_preview": "I tried taking ibuprofen and elevating it last night, but the joint is still throbbing and painful this morning.",
+      "true_end_time": 7770.0,
+      "silence_ms": 1120.0,
+      "category": "incomplete",
+      "patient_listener_delay_ms": 551.2,
+      "response_source": "policy (cp=250ms)"
     }
   ]
 }

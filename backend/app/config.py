@@ -18,8 +18,10 @@ class TurnManagerConfig(BaseModel):
 
 
 class PolicyConfig(BaseModel):
-    confidence_hi: float = 0.70
+    confidence_hi: float = 0.30
     confidence_lo: float = 0.30
+    operating_point: str = "Point A (Delay budget <= 800ms)"
+    operating_point_provenance: str = "DEV-selected Point A: hi=0.30, lo=0.30 (DEV delay P50 <= 800ms, minimizing premature rate)"
     reask_interval_ms: int = 300
 
 

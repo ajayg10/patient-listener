@@ -33,6 +33,10 @@ def test_health_endpoint(client: TestClient) -> None:
     assert "cache_provenance" in data
     assert "bedrock_status" in data
     assert data["bedrock_status"]["status"] == "SKIPPED"
+    assert "policy" in data
+    assert data["policy"]["hi"] == 0.30
+    assert data["policy"]["lo"] == 0.30
+    assert "Point A" in data["policy"]["operating_point"]
 
 
 def test_results_endpoint(client: TestClient) -> None:

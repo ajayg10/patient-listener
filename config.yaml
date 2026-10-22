@@ -4,8 +4,10 @@ turn_manager:
   silence_debounce_ms: 50
 
 policy:
-  confidence_hi: 0.70
+  confidence_hi: 0.30
   confidence_lo: 0.30
+  operating_point: "Point A (Delay budget <= 800ms)"
+  operating_point_provenance: "DEV-selected Point A: hi=0.30, lo=0.30 (DEV delay P50 <= 800ms, minimizing premature rate)"
   reask_interval_ms: 300
 
 pace_profile:
