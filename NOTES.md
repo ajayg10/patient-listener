@@ -21,6 +21,7 @@
 | E1 | run_eval speed optimization | DONE | 2026-10-21 |
 | E2 | Real cache validation and archive | DONE | 2026-10-22 |
 | E3 | Real Decider evaluation | DONE | 2026-10-22 |
+| E4 | Calibration audit & operating point analysis | IN PROGRESS | 2026-10-22 |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | DONE | 2026-10-22 |
 | F4 | Profile + regret UI | TODO | |
@@ -1388,7 +1389,71 @@
   * Re-generated `results_reliability.png` and `results_pareto.png` with real provenance captions.
   * Updated `results.md` programmatically from `eval_results.json`.
 
+## Step E4 — PLAN
+- **Goal**: Resolve the degenerate policy behavior observed in Step E3 where Decider showed delay P50/P95 of exactly 2200 ms and 0.0% premature rate (every turn hitting `max_hold_ms=2200ms`, rendering Decider identical to a fixed 2.2s timeout). Perform rigorous calibration audit, evaluate probability distributions, sweep operating points on DEV, report on TEST with cluster bootstrap CIs, relabel reference rows, and re-pick demo scenarios from policy decisions.
+- **Approach**:
+  1. Audit calibration objective, grid, cadence floor, and dev-chosen values; assess delay term and always-wait exploitability.
+  2. Tabulate exact p(done)=P(RESPOND) and p(mid_thought)=P(YES) distributions from the real cache across categories (complete, incomplete, ambiguous) and checkpoints (250, 500, 800, 1200, 1800 ms).
+  3. Measure policy vs max_hold cap trigger fractions for Decider and Decider+Profile.
+  4. Evaluate argmax baseline (RESPOND at first checkpoint where p(done) >= 0.50, else cap).
+  5. Sweep thresholds on DEV only to identify Point A (delay budget <= 800 ms) and Point B (premature budget <= 5.0%), then evaluate all 5 families on TEST with paired cluster bootstrap differences.
+  6. Relabel single first-checkpoint references in results.md and frontend, document per-user headroom limitation.
+  7. Re-pick demo scenarios using Point A policy so Patient Listener responds from model decision before the cap.
+
+### Calibration Audit & Probability Distributions (Step E4.1 - E4.4)
+- **1. Objective Function & Search Space**:
+  * Exact objective function: `score = accuracy - (0.5 * premature_rate)`.
+  * Grid: 64 candidate threshold pairs on DEV:
+    - `hi` in `[0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90]`
+    - `lo` in `[0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45]` (subject to `hi > lo`)
+  * Cadence floor: `min_silence_for_respond_ms = 250.0 ms`.
+  * Timeout cap: `max_hold_ms = 2200.0 ms`.
+  * DEV-chosen values in E3: `hi = 0.55, lo = 0.10` (DEV score = 1.0000, Acc = 100.0%, Premature = 0.0%).
+  * Delay term in objective: **NO**. The objective contains zero latency penalty.
+  * Can always-waiting satisfy it? **YES**. Complete turns coerce to RESPOND at `max_hold_ms=2200ms`, which counts as `pred_action == gt`, giving 100% accuracy and 0% premature rate. An agent that never fires from policy and always waits for max_hold achieves a perfect score of 1.0000.
+
+- **2. p(done) = P(RESPOND) Distribution from Real Cache (Q1 turn_complete, TEST split)**:
+  * **Category COMPLETE (n=90)**:
+    - cp=250ms: n=90, mean=0.339, min=0.209, p25=0.280, med=0.328, p75=0.388, max=0.491 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=500ms: n=90, mean=0.347, min=0.219, p25=0.279, med=0.328, p75=0.398, max=0.525 | >=0.5: 11.1%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=800ms: n=90, mean=0.303, min=0.202, p25=0.230, med=0.280, p75=0.349, max=0.503 | >=0.5: 11.1%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=1200ms: n=90, mean=0.319, min=0.195, p25=0.249, med=0.298, p75=0.381, max=0.505 | >=0.5: 11.1%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=1800ms: n=90, mean=0.309, min=0.196, p25=0.234, med=0.282, p75=0.373, max=0.484 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+  * **Category INCOMPLETE (n=28 to 89)**:
+    - cp=250ms: n=89, mean=0.094, min=0.058, p25=0.078, med=0.091, p75=0.103, max=0.151 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=500ms: n=60, mean=0.099, min=0.058, p25=0.082, med=0.096, p75=0.104, max=0.160 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=800ms: n=28, mean=0.101, min=0.058, p25=0.084, med=0.100, p75=0.103, max=0.152 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+  * **Category AMBIGUOUS (n=91 to 180)**:
+    - cp=250ms: n=180, mean=0.339, min=0.177, p25=0.275, med=0.321, p75=0.408, max=0.491 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=500ms: n=162, mean=0.350, min=0.178, p25=0.284, med=0.332, p75=0.413, max=0.492 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=800ms: n=131, mean=0.320, min=0.164, p25=0.250, med=0.353, p75=0.408, max=0.447 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=1200ms: n=91, mean=0.326, min=0.158, p25=0.260, med=0.356, p75=0.409, max=0.467 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=1800ms: n=91, mean=0.316, min=0.157, p25=0.251, med=0.347, p75=0.399, max=0.451 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+  * **With Profile Variant (Category COMPLETE, n=90)**:
+    - cp=250ms: n=90, mean=0.342, min=0.212, p25=0.282, med=0.347, p75=0.395, max=0.453 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=500ms: n=90, mean=0.332, min=0.205, p25=0.272, med=0.334, p75=0.380, max=0.445 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=800ms: n=90, mean=0.323, min=0.204, p25=0.265, med=0.329, p75=0.377, max=0.469 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=1200ms: n=90, mean=0.338, min=0.207, p25=0.272, med=0.343, p75=0.400, max=0.476 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+    - cp=1800ms: n=90, mean=0.331, min=0.210, p25=0.271, med=0.330, p75=0.386, max=0.457 | >=0.5: 0.0%, >=0.7: 0.0%, >=0.9: 0.0%
+  * **Q2 mid_thought: p(mid_thought) = P(YES) (TEST split, no profile)**:
+    - Complete: med 0.494 - 0.551 (cp 250-1200ms >=0.5: 53.3%; max: 0.699; >=0.7: 0.0%)
+    - Incomplete: med 0.842 - 0.881 (all checkpoints >=0.5: 100.0%, >=0.7: 100.0%, >=0.9: 7.1% - 20.2%)
+    - Ambiguous: med 0.379 - 0.476 (cp 250-800ms >=0.5: 35.6% - 38.9%, >=0.7: 0.0%)
+  * **Q2 mid_thought with Profile**:
+    - Complete: med 0.470 - 0.525 (>=0.5: 36.7% - 55.6%, >=0.7: 0.0%)
+    - Incomplete: med 0.824 - 0.841 (>=0.5: 100.0%, >=0.7: 100.0%, >=0.9: 7.1% - 10.1%)
+    - Ambiguous: med 0.381 - 0.433 (>=0.5: 12.1% - 27.8%, >=0.7: 0.0%)
+
+- **3. Fraction of Turns from Policy vs Max Hold Cap (hi=0.55, lo=0.10)**:
+  * Decider: Policy RESPOND = 0 / 181 (0.0%), Max Hold Cap = 181 / 181 (100.0%)
+  * Decider+Profile: Policy RESPOND = 0 / 181 (0.0%), Max Hold Cap = 181 / 181 (100.0%)
+
+- **4. Reference Rows: Argmax Policy (p(done) >= 0.50, else Cap)**:
+  * Decider (Argmax): Policy triggers = 10 / 181, Cap triggers = 171 / 181 | Premature = 0.0%, Delay P50 = 2200.0 ms, Delay P95 = 2200.0 ms.
+  * Decider+Profile (Argmax): Policy triggers = 0 / 181, Cap triggers = 181 / 181 | Premature = 0.0%, Delay P50 = 2200.0 ms, Delay P95 = 2200.0 ms.
+
 ## Article material (running list)
+- **Progress note (docs: audit decider policy calibration)**: Documented calibration objective audit, p(done) and p(mid_thought) distributions, policy vs cap trigger fractions, and argmax reference rows in NOTES.md.
 - **Progress note (fix: read decision latency label from provenance)**: Configured default cache to real 8,450-record cache with 301.2 ms latency; wired dynamic latency and source from /health and provenance JSON into API endpoints and frontend banners.
 - **Progress note (feat: pick demo scenarios from real cache)**: Selected 10 balanced demo scenarios (5 slow_pauser, 5 filler_heavy) from 68 qualifying cases on real Tesla T4 cache.
 - **Progress note (docs: record real decider results and findings)**: Documented real decider benchmark findings, paired bootstrap differences, and latency observations in results.md and NOTES.md.

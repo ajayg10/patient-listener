@@ -38,6 +38,7 @@ packages = ["patient_listener_pattern", "backend"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = ["scratch"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
