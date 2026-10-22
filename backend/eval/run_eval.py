@@ -942,10 +942,15 @@ def run_full_evaluation(
         with open(PERSONAS_PATH, "r", encoding="utf-8") as f:
             personas_dict = yaml.safe_load(f).get("archetypes", {})
 
-    all_runs["PERSONA-BLIND CEILING"] = evaluate_persona_blind_ceiling(turns)
-    all_runs["ARCHETYPE-AWARE CEILING"] = evaluate_archetype_aware_ceiling(turns)
-    all_runs["USER-AWARE CEILING"] = evaluate_user_aware_ceiling(turns, personas_dict)
-    all_runs["ORACLE-UPPER-BOUND (Persona-Aware)"] = evaluate_oracle_upper_bound(turns)
+    ref_blind_name = "PERSONA-BLIND REFERENCE (single first-checkpoint, not a ceiling)"
+    ref_arch_name = "ARCHETYPE-AWARE REFERENCE (single first-checkpoint, not a ceiling)"
+    ref_user_name = "USER-AWARE REFERENCE (single first-checkpoint, not a ceiling)"
+    ref_oracle_name = "ORACLE-UPPER-BOUND REFERENCE (single first-checkpoint, not a ceiling)"
+
+    all_runs[ref_blind_name] = evaluate_persona_blind_ceiling(turns)
+    all_runs[ref_arch_name] = evaluate_archetype_aware_ceiling(turns)
+    all_runs[ref_user_name] = evaluate_user_aware_ceiling(turns, personas_dict)
+    all_runs[ref_oracle_name] = evaluate_oracle_upper_bound(turns)
 
     t_replay = time.perf_counter() - t0_replay
     print(f"[timer] Stage 3/6 (Replay Evaluation): {t_replay:.2f}s ({len(all_runs)} configurations)")
@@ -954,20 +959,20 @@ def run_full_evaluation(
     t0_boot = time.perf_counter()
     n_resamples = 200 if fast else 1000
 
-    # Paired differences between reference ceilings (Cluster Bootstrap over users)
+    # Paired differences between reference rows (Cluster Bootstrap over users)
     diff_arch_blind, ci_arch_blind = cluster_bootstrap_paired_difference_ci(
-        all_runs["PERSONA-BLIND CEILING"],
-        all_runs["ARCHETYPE-AWARE CEILING"],
+        all_runs[ref_blind_name],
+        all_runs[ref_arch_name],
         n_resamples=n_resamples,
     )
     diff_user_arch, ci_user_arch = cluster_bootstrap_paired_difference_ci(
-        all_runs["ARCHETYPE-AWARE CEILING"],
-        all_runs["USER-AWARE CEILING"],
+        all_runs[ref_arch_name],
+        all_runs[ref_user_name],
         n_resamples=n_resamples,
     )
     diff_user_blind, ci_user_blind = cluster_bootstrap_paired_difference_ci(
-        all_runs["PERSONA-BLIND CEILING"],
-        all_runs["USER-AWARE CEILING"],
+        all_runs[ref_blind_name],
+        all_runs[ref_user_name],
         n_resamples=n_resamples,
     )
 
@@ -1009,10 +1014,10 @@ def run_full_evaluation(
         benchmark_run_name,
         zero_ms_run_name,
         cpu_run_name,
-        "PERSONA-BLIND CEILING",
-        "ARCHETYPE-AWARE CEILING",
-        "USER-AWARE CEILING",
-        "ORACLE-UPPER-BOUND (Persona-Aware)",
+        ref_blind_name,
+        ref_arch_name,
+        ref_user_name,
+        ref_oracle_name,
     ]
 
     personas = ["fast_pauser", "slow_pauser", "filler_heavy"]
@@ -1155,9 +1160,9 @@ def run_full_evaluation(
     s_prof = s_map[headline_profile_name]
     s_heur = s_map["Text Heuristic Baseline (250ms, dev-tuned)"]
     s_ctrl = s_map["Per-User Text Heuristic (Profile Threshold, No Model)"]
-    s_blind = s_map["PERSONA-BLIND CEILING"]
-    s_arch = s_map["ARCHETYPE-AWARE CEILING"]
-    s_user = s_map["USER-AWARE CEILING"]
+    s_blind = s_map[ref_blind_name]
+    s_arch = s_map[ref_arch_name]
+    s_user = s_map[ref_user_name]
 
     # JSON Output structure
     out_json = {
@@ -1246,6 +1251,23 @@ def run_full_evaluation(
                 "observed_diff": diff_prof_ctrl,
                 "ci_low": ci_prof_ctrl.low,
                 "ci_high": ci_prof_ctrl.high,
+            },
+        },
+        "reference_rows_paired_differences": {
+            "archetype_vs_blind": {
+                "observed_diff": diff_arch_blind,
+                "ci_low": ci_arch_blind.low,
+                "ci_high": ci_arch_blind.high,
+            },
+            "user_vs_archetype": {
+                "observed_diff": diff_user_arch,
+                "ci_low": ci_user_arch.low,
+                "ci_high": ci_user_arch.high,
+            },
+            "user_vs_blind": {
+                "observed_diff": diff_user_blind,
+                "ci_low": ci_user_blind.low,
+                "ci_high": ci_user_blind.high,
             },
         },
         "reference_ceilings_paired_differences": {
@@ -1339,11 +1361,67 @@ def run_full_evaluation(
         "- **States difference (test 156 -> 155)**: In the B5.8 test realization, one slow template never experienced a silence lasting to the 1800 ms checkpoint.",
         "- **2,250 vs 1,831 lookups**: 1,831 (685 dev + 1,146 test) is the single-pass lookup count, whereas 2,250 was the cumulative query count across all latency sweeps in `run_eval.py`.",
         "",
-        f"## 1. Test Split Turn-Taking Comparison (n={n_total} turns across {n_users} users, {t_per_u} turns/user)",
+        f"## 1. Operating Point Benchmark: Premature Interruption and Delay (n={n_total} test turns across {n_users} users)",
+        "",
+        "> [!NOTE]",
+        "> **Operating Points Chosen on DEV Only, Reported on TEST Only**:",
+        "> - **Point A (Delay Budget)**: DEV delay P50 <= 800 ms (matching Fixed 800ms baseline), minimizing DEV premature rate.",
+        "> - **Point B (Premature Budget)**: DEV premature rate <= 5.0%, minimizing DEV delay P50.",
+        "> - *Accuracy is removed from this headline comparison as delay and premature interruption rate jointly define turn-taking quality.*",
+        "",
+        "| Operating Point | Approach | Parameter | Premature Interruption (Cluster 95% CI) | Delay P50 (Bootstrap 95% CI) | Delay P95 | Condition |",
+        "|---|---|---|---|---|---|---|",
+    ]
+
+    op_data = out_json["operating_points"]
+    fam_display_order = ["Fixed Timeout", "Text Heuristic", "Per-User Control", "Decider", "Decider + Profile"]
+    for pt_key, pt_label in [("point_a", "Point A (Delay budget <= 800ms)"), ("point_b", "Point B (Premature budget <= 5%)")]:
+        for fam in fam_display_order:
+            row_data = op_data[pt_key][fam]
+            prem_ci_str = f"[{row_data['premature_cluster_ci'][0] * 100:.1f}%, {row_data['premature_cluster_ci'][1] * 100:.1f}%]"
+            del_ci_str = f"[{row_data['delay_p50_ci'][0]:.1f}, {row_data['delay_p50_ci'][1]:.1f}] ms"
+            p_val = row_data['param']
+            p_str = f"{p_val} ms" if isinstance(p_val, int) or (isinstance(p_val, float) and p_val >= 50) else (f"scale {p_val:.2f}" if "Control" in fam else f"hi = {p_val:.2f}")
+            disp_name = "Strands Decider 2B" if fam == "Decider" else ("Strands Decider 2B + Profile" if fam == "Decider + Profile" else fam)
+            md_lines.append(
+                f"| {pt_label} | {disp_name} | {p_str} | "
+                f"{row_data['premature_rate'] * 100:.1f}% {prem_ci_str} | "
+                f"{row_data['delay_p50_ms']:.0f} ms {del_ci_str} | "
+                f"{row_data['delay_p95_ms']:.0f} ms | {row_data['condition']} |"
+            )
+
+    # Paired Differences at Operating Points
+    p_diff_a = op_data["paired_differences_point_a"]
+    p_diff_b = op_data["paired_differences_point_b"]
+
+    md_lines.extend([
+        "",
+        "### Key Paired Differences at Operating Points (Cluster Bootstrap 95% CI over Users)",
+        "",
+        "#### Point A: Paired Premature Rate Differences (Equal Delay Budget <= 800ms)",
+        "| Comparison | Model A | Model B | Paired Premature Difference (B - A) | Cluster Bootstrap 95% CI |",
+        "|---|---|---|---|---|",
+        f"| Decider vs Fixed Timeout | Fixed Timeout (800ms) | Strands Decider 2B (hi=0.30) | {p_diff_a['decider_minus_fixed']['observed_diff'] * 100:+.1f}% | [{p_diff_a['decider_minus_fixed']['ci_low'] * 100:+.1f}%, {p_diff_a['decider_minus_fixed']['ci_high'] * 100:+.1f}%] |",
+        f"| Decider vs Text Heuristic | Text Heuristic (800ms) | Strands Decider 2B (hi=0.30) | {p_diff_a['decider_minus_heuristic']['observed_diff'] * 100:+.1f}% | [{p_diff_a['decider_minus_heuristic']['ci_low'] * 100:+.1f}%, {p_diff_a['decider_minus_heuristic']['ci_high'] * 100:+.1f}%] |",
+        f"| Decider+Profile vs Decider | Strands Decider 2B (hi=0.30) | Strands Decider 2B + Profile (hi=0.30) | {p_diff_a['profile_minus_decider']['observed_diff'] * 100:+.1f}% | [{p_diff_a['profile_minus_decider']['ci_low'] * 100:+.1f}%, {p_diff_a['profile_minus_decider']['ci_high'] * 100:+.1f}%] |",
+        f"| Decider+Profile vs Per-User Control | Per-User Control (scale 1.15) | Strands Decider 2B + Profile (hi=0.30) | {p_diff_a['profile_minus_control']['observed_diff'] * 100:+.1f}% | [{p_diff_a['profile_minus_control']['ci_low'] * 100:+.1f}%, {p_diff_a['profile_minus_control']['ci_high'] * 100:+.1f}%] |",
+        "",
+        "#### Point B: Paired Response Delay Differences (Equal Premature Budget <= 5%)",
+        "| Comparison | Model A | Model B | Paired Delay Difference (B - A) | Cluster Bootstrap 95% CI |",
+        "|---|---|---|---|---|",
+        f"| Decider vs Fixed Timeout | Fixed Timeout (950ms) | Strands Decider 2B (hi=0.55) | {p_diff_b['decider_minus_fixed']['observed_diff']:+.1f} ms | [{p_diff_b['decider_minus_fixed']['ci_low']:+.1f}, {p_diff_b['decider_minus_fixed']['ci_high']:+.1f}] ms |",
+        f"| Decider vs Text Heuristic | Text Heuristic (950ms) | Strands Decider 2B (hi=0.55) | {p_diff_b['decider_minus_heuristic']['observed_diff']:+.1f} ms | [{p_diff_b['decider_minus_heuristic']['ci_low']:+.1f}, {p_diff_b['decider_minus_heuristic']['ci_high']:+.1f}] ms |",
+        f"| Decider+Profile vs Decider | Strands Decider 2B (hi=0.55) | Strands Decider 2B + Profile (hi=0.50) | {p_diff_b['profile_minus_decider']['observed_diff']:+.1f} ms | [{p_diff_b['profile_minus_decider']['ci_low']:+.1f}, {p_diff_b['profile_minus_decider']['ci_high']:+.1f}] ms |",
+        f"| Decider+Profile vs Per-User Control | Per-User Control (scale 1.10) | Strands Decider 2B + Profile (hi=0.50) | {p_diff_b['profile_minus_control']['observed_diff']:+.1f} ms | [{p_diff_b['profile_minus_control']['ci_low']:+.1f}, {p_diff_b['profile_minus_control']['ci_high']:+.1f}] ms |",
+        "",
+        "### Dominance Analysis at Operating Points",
+        f"- {op_data['dominance_finding']}",
+        "",
+        "## 1B. Exploratory Full Benchmark Comparison (19 Latency & Sensitivity Configurations)",
         "",
         "| Approach | Accuracy (Cluster 95% CI) | Accuracy (Wilson 95% CI) | Premature Interruption (Cluster 95% CI) | Premature (Wilson 95% CI) | Unnecessary Wait (Cluster 95% CI) | Unnecessary Wait (Wilson 95% CI) | Delay P50 (Bootstrap 95% CI) | Delay P95 | Latency Condition |",
         "|---|---|---|---|---|---|---|---|---|---|",
-    ]
+    ])
 
     for s in summaries:
         acc_cluster_str = f"{s.accuracy * 100:.1f}% {s.accuracy_cluster_ci.format_pct()}"
@@ -1361,14 +1439,8 @@ def run_full_evaluation(
             cond = "profile threshold (no model)"
         elif "Heuristic" in s.name:
             cond = "dev-tuned"
-        elif "PERSONA-BLIND" in s.name:
-            cond = "Reference ceiling (blind)"
-        elif "ARCHETYPE-AWARE" in s.name:
-            cond = "Reference ceiling (archetype-aware)"
-        elif "USER-AWARE" in s.name:
-            cond = "Reference ceiling (user-aware)"
-        elif "ORACLE" in s.name:
-            cond = "Reference ceiling (persona-aware)"
+        elif "REFERENCE" in s.name:
+            cond = "Single first-checkpoint reference, not a ceiling"
         elif "Calibrated Policy" in s.name:
             cond = "calibrated policy, virtual clock"
         elif "Profile" in s.name:
@@ -1394,28 +1466,16 @@ def run_full_evaluation(
     # Bedrock Judge row
     md_lines.append(f"| Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED ({judge_reason}) |")
 
-    # Key Paired Differences Table
+    # Reference Rows Paired Differences Table
     md_lines.extend([
         "",
-        "### Key Paired Differences (Cluster Bootstrap 95% CI over Users)",
+        "### Reference Rows Paired Differences (Single First-Checkpoint Reference, Not a Ceiling)",
         "",
-        "| Comparison | Model A | Model B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |",
+        "| Comparison | Reference A | Reference B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |",
         "|---|---|---|---|---|",
-        f"| Decider vs Text Heuristic | Text Heuristic Baseline (250ms, dev-tuned) | {headline_decider_name} | {diff_dec_heur * 100:+.1f}% | [{ci_dec_heur.low * 100:+.1f}%, {ci_dec_heur.high * 100:+.1f}%] |",
-        f"| Decider+Profile vs Decider | {headline_decider_name} | {headline_profile_name} | {diff_prof_dec * 100:+.1f}% | [{ci_prof_dec.low * 100:+.1f}%, {ci_prof_dec.high * 100:+.1f}%] |",
-        f"| Decider+Profile vs Per-User Control | Per-User Text Heuristic (Profile Threshold, No Model) | {headline_profile_name} | {diff_prof_ctrl * 100:+.1f}% | [{ci_prof_ctrl.low * 100:+.1f}%, {ci_prof_ctrl.high * 100:+.1f}%] |",
-    ])
-
-    # Reference Ceilings Paired Differences Table
-    md_lines.extend([
-        "",
-        "### Reference Ceilings Paired Differences (Cluster Bootstrap 95% CI over Users)",
-        "",
-        "| Comparison | Reference Ceiling A | Reference Ceiling B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |",
-        "|---|---|---|---|---|",
-        f"| Archetype vs Blind | PERSONA-BLIND CEILING | ARCHETYPE-AWARE CEILING | {diff_arch_blind * 100:+.1f}% | [{ci_arch_blind.low * 100:+.1f}%, {ci_arch_blind.high * 100:+.1f}%] |",
-        f"| User vs Archetype | ARCHETYPE-AWARE CEILING | USER-AWARE CEILING | {diff_user_arch * 100:+.1f}% | [{ci_user_arch.low * 100:+.1f}%, {ci_user_arch.high * 100:+.1f}%] |",
-        f"| User vs Blind | PERSONA-BLIND CEILING | USER-AWARE CEILING | {diff_user_blind * 100:+.1f}% | [{ci_user_blind.low * 100:+.1f}%, {ci_user_blind.high * 100:+.1f}%] |",
+        f"| Archetype vs Blind | PERSONA-BLIND REFERENCE | ARCHETYPE-AWARE REFERENCE | {diff_arch_blind * 100:+.1f}% | [{ci_arch_blind.low * 100:+.1f}%, {ci_arch_blind.high * 100:+.1f}%] |",
+        f"| User vs Archetype | ARCHETYPE-AWARE REFERENCE | USER-AWARE REFERENCE | {diff_user_arch * 100:+.1f}% | [{ci_user_arch.low * 100:+.1f}%, {ci_user_arch.high * 100:+.1f}%] |",
+        f"| User vs Blind | PERSONA-BLIND REFERENCE | USER-AWARE REFERENCE | {diff_user_blind * 100:+.1f}% | [{ci_user_blind.low * 100:+.1f}%, {ci_user_blind.high * 100:+.1f}%] |",
     ])
 
     # Section 2: Per-Persona Breakdown
@@ -1504,7 +1564,7 @@ def run_full_evaluation(
         f"- **Response Delay (P50/P95)**: Elapsed time in milliseconds from speech end to agent floor yield, evaluated exclusively over completed turns (n={n_fin}).",
         f"- **Accuracy**: Binary turn-taking decision accuracy over all turns (n={n_total}).",
         f"- **Uncertainty Intervals**: Headline tables report non-parametric two-stage cluster bootstrap 95% intervals (B=1000 resamples: sample users with replacement, then sample turns within user with replacement) to account for turn clustering across {n_users} users ({t_per_u} turns/user). Secondary column reports standard Wilson 1927 score intervals for comparison.",
-        "- **Reference Ceilings**: `PERSONA-BLIND CEILING` (blind), `ARCHETYPE-AWARE CEILING` (archetype parameters), and `USER-AWARE CEILING` (individual user continuation probability p_user) represent theoretical policy bounds under varying degrees of user knowledge. None are achievable baselines; all serve as reference ceilings.",
+        "- **Single First-Checkpoint Reference Rows (Not Ceilings)**: Labeled 'single first-checkpoint reference, not a ceiling' (formerly reference ceilings). These rows evaluate decisions only at the first checkpoint (250 ms) without multi-checkpoint dynamics. The archetype-aware vs user-aware gap is about 0.5 points (81.4% vs 81.9%), meaning little per-user headroom in this dataset (a limitation). Note that the per-user control heuristic (87.2%) beats the user-aware reference (81.9%), proving that single-checkpoint references are not upper bounds for multi-checkpoint policies. Multi-checkpoint reference from known pause distributions was skipped under the 20-minute limit.",
     ])
 
     # Section 7: Findings & Observations
@@ -1520,29 +1580,28 @@ def run_full_evaluation(
             "",
             "## 7. Findings & Observations",
             "",
-            "### A. Decider vs Text Heuristic vs Per-User Threshold Control",
-            f"- **Premature Interruption Rate**: Strands Decider 2B achieves {s_dec.premature_interruption_rate * 100:.1f}% [{s_dec.premature_interruption_cluster_ci.low * 100:.1f}%, {s_dec.premature_interruption_cluster_ci.high * 100:.1f}%] premature interruptions (0 cut-ins across all {n_total} test turns), outperforming the Text Heuristic ({s_heur.premature_interruption_rate * 100:.1f}% [{s_heur.premature_interruption_cluster_ci.low * 100:.1f}%, {s_heur.premature_interruption_cluster_ci.high * 100:.1f}%]) and Per-User Control ({s_ctrl.premature_interruption_rate * 100:.1f}% [{s_ctrl.premature_interruption_cluster_ci.low * 100:.1f}%, {s_ctrl.premature_interruption_cluster_ci.high * 100:.1f}%]).",
-            f"- **Response Delay (P50/P95)**: Strands Decider 2B exhibits {s_dec.response_delay_p50_ms:.0f} ms [{s_dec.response_delay_p50_ci.low:.1f}, {s_dec.response_delay_p50_ci.high:.1f}] ms P50 and {s_dec.response_delay_p95_ms:.0f} ms P95. The Text Heuristic achieves {s_heur.response_delay_p50_ms:.0f} ms [{s_heur.response_delay_p50_ci.low:.1f}, {s_heur.response_delay_p50_ci.high:.1f}] ms P50 and {s_heur.response_delay_p95_ms:.0f} ms P95. The Per-User Control achieves {s_ctrl.response_delay_p50_ms:.0f} ms [{s_ctrl.response_delay_p50_ci.low:.1f}, {s_ctrl.response_delay_p50_ci.high:.1f}] ms P50 and {s_ctrl.response_delay_p95_ms:.0f} ms P95.",
-            f"- **Per-Persona Breakdown**: For slow pausers, Fixed 600ms causes {persona_breakdown['Fixed 600ms Baseline']['slow_pauser']['premature_rate']*100:.1f}% premature interruptions, Text Heuristic causes {persona_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['slow_pauser']['premature_rate']*100:.1f}%, whereas Decider 2B achieves {persona_breakdown[headline_decider_name]['slow_pauser']['premature_rate']*100:.1f}%. For fast pausers, Decider delay P50 is {persona_breakdown[headline_decider_name]['fast_pauser']['delay_p50_ms']:.0f} ms versus {persona_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['fast_pauser']['delay_p50_ms']:.0f} ms for Text Heuristic.",
-            f"- **Per-Category Breakdown**: On ambiguous turns, Text Heuristic yields {category_breakdown['Text Heuristic Baseline (250ms, dev-tuned)']['ambiguous']['premature_rate']*100:.1f}% premature interruptions, whereas Decider 2B yields {category_breakdown[headline_decider_name]['ambiguous']['premature_rate']*100:.1f}%. On complete turns, Decider delay P50 is {category_breakdown[headline_decider_name]['complete']['delay_p50_ms']:.0f} ms.",
+            "### A. Operating Points Performance (Points A & B)",
+            f"- **Point A (Delay Budget <= 800ms)**: Strands Decider 2B achieves {op_data['point_a']['Decider']['premature_rate']*100:.1f}% premature rate and {op_data['point_a']['Decider']['delay_p50_ms']:.0f} ms delay P50 ({op_data['point_a']['Decider']['delay_p95_ms']:.0f} ms P95). The Fixed Timeout (800ms) yields {op_data['point_a']['Fixed Timeout']['premature_rate']*100:.1f}% premature rate and {op_data['point_a']['Fixed Timeout']['delay_p50_ms']:.0f} ms delay P50. The Text Heuristic (800ms) yields {op_data['point_a']['Text Heuristic']['premature_rate']*100:.1f}% premature rate and {op_data['point_a']['Text Heuristic']['delay_p50_ms']:.0f} ms delay P50. The Per-User Control yields {op_data['point_a']['Per-User Control']['premature_rate']*100:.1f}% premature rate and {op_data['point_a']['Per-User Control']['delay_p50_ms']:.0f} ms delay P50. Decider+Profile achieves {op_data['point_a']['Decider + Profile']['premature_rate']*100:.1f}% premature rate and {op_data['point_a']['Decider + Profile']['delay_p50_ms']:.0f} ms delay P50.",
+            f"- **Point B (Premature Budget <= 5.0%)**: Strands Decider 2B achieves {op_data['point_b']['Decider']['premature_rate']*100:.1f}% premature rate and {op_data['point_b']['Decider']['delay_p50_ms']:.0f} ms delay P50 ({op_data['point_b']['Decider']['delay_p95_ms']:.0f} ms P95). The Fixed Timeout (950ms) yields {op_data['point_b']['Fixed Timeout']['premature_rate']*100:.1f}% premature rate and {op_data['point_b']['Fixed Timeout']['delay_p50_ms']:.0f} ms delay P50. The Text Heuristic (950ms) yields {op_data['point_b']['Text Heuristic']['premature_rate']*100:.1f}% premature rate and {op_data['point_b']['Text Heuristic']['delay_p50_ms']:.0f} ms delay P50. The Per-User Control yields {op_data['point_b']['Per-User Control']['premature_rate']*100:.1f}% premature rate and {op_data['point_b']['Per-User Control']['delay_p50_ms']:.0f} ms delay P50. Decider+Profile achieves {op_data['point_b']['Decider + Profile']['premature_rate']*100:.1f}% premature rate and {op_data['point_b']['Decider + Profile']['delay_p50_ms']:.0f} ms delay P50.",
+            f"- **Dominance Analysis**: {op_data['dominance_finding']}",
             "",
-            "### B. Paired Cluster-Bootstrap Differences (with 95% CIs)",
-            f"- **Decider minus Text Heuristic**: {diff_dec_heur * 100:+.1f}% [{ci_dec_heur.low * 100:+.1f}%, {ci_dec_heur.high * 100:+.1f}%].",
-            f"- **Decider+Profile minus Decider**: {diff_prof_dec * 100:+.1f}% [{ci_prof_dec.low * 100:+.1f}%, {ci_prof_dec.high * 100:+.1f}%].",
-            f"- **Decider+Profile minus Per-User Control**: {diff_prof_ctrl * 100:+.1f}% [{ci_prof_ctrl.low * 100:+.1f}%, {ci_prof_ctrl.high * 100:+.1f}%].",
-            f"- **Decider+Profile Overall Performance**: Accuracy {s_prof.accuracy * 100:.1f}%, Premature {s_prof.premature_interruption_rate * 100:.1f}%, Delay P50 {s_prof.response_delay_p50_ms:.0f} ms.",
+            "### B. Paired Differences at Operating Points",
+            f"- **Point A (Premature Rate Difference at Delay Budget <= 800ms)**: Decider minus Fixed 800ms: {p_diff_a['decider_minus_fixed']['observed_diff']*100:+.1f}% [{p_diff_a['decider_minus_fixed']['ci_low']*100:+.1f}%, {p_diff_a['decider_minus_fixed']['ci_high']*100:+.1f}%]; Decider minus Text Heuristic: {p_diff_a['decider_minus_heuristic']['observed_diff']*100:+.1f}% [{p_diff_a['decider_minus_heuristic']['ci_low']*100:+.1f}%, {p_diff_a['decider_minus_heuristic']['ci_high']*100:+.1f}%]; Decider+Profile minus Decider: {p_diff_a['profile_minus_decider']['observed_diff']*100:+.1f}% [{p_diff_a['profile_minus_decider']['ci_low']*100:+.1f}%, {p_diff_a['profile_minus_decider']['ci_high']*100:+.1f}%]; Decider+Profile minus Per-User Control: {p_diff_a['profile_minus_control']['observed_diff']*100:+.1f}% [{p_diff_a['profile_minus_control']['ci_low']*100:+.1f}%, {p_diff_a['profile_minus_control']['ci_high']*100:+.1f}%].",
+            f"- **Point B (Response Delay Difference at Premature Budget <= 5%)**: Decider minus Fixed 950ms: {p_diff_b['decider_minus_fixed']['observed_diff']:+.1f} ms [{p_diff_b['decider_minus_fixed']['ci_low']:+.1f}, {p_diff_b['decider_minus_fixed']['ci_high']:+.1f}] ms; Decider minus Text Heuristic: {p_diff_b['decider_minus_heuristic']['observed_diff']:+.1f} ms [{p_diff_b['decider_minus_heuristic']['ci_low']:+.1f}, {p_diff_b['decider_minus_heuristic']['ci_high']:+.1f}] ms; Decider+Profile minus Decider: {p_diff_b['profile_minus_decider']['observed_diff']:+.1f} ms [{p_diff_b['profile_minus_decider']['ci_low']:+.1f}, {p_diff_b['profile_minus_decider']['ci_high']:+.1f}] ms; Decider+Profile minus Per-User Control: {p_diff_b['profile_minus_control']['observed_diff']:+.1f} ms [{p_diff_b['profile_minus_control']['ci_low']:+.1f}, {p_diff_b['profile_minus_control']['ci_high']:+.1f}] ms.",
             "",
-            "### C. Reference Ceilings",
-            f"- **PERSONA-BLIND CEILING**: Accuracy {s_blind.accuracy * 100:.1f}%, Premature {s_blind.premature_interruption_rate * 100:.1f}%, Delay P50 {s_blind.response_delay_p50_ms:.0f} ms.",
-            f"- **ARCHETYPE-AWARE CEILING**: Accuracy {s_arch.accuracy * 100:.1f}%, Premature {s_arch.premature_interruption_rate * 100:.1f}%, Delay P50 {s_arch.response_delay_p50_ms:.0f} ms.",
-            f"- **USER-AWARE CEILING**: Accuracy {s_user.accuracy * 100:.1f}%, Premature {s_user.premature_interruption_rate * 100:.1f}%, Delay P50 {s_user.response_delay_p50_ms:.0f} ms.",
+            "### C. Single First-Checkpoint Reference Rows (Not Ceilings)",
+            f"- **PERSONA-BLIND REFERENCE**: Accuracy {s_blind.accuracy * 100:.1f}%, Premature {s_blind.premature_interruption_rate * 100:.1f}%, Delay P50 {s_blind.response_delay_p50_ms:.0f} ms.",
+            f"- **ARCHETYPE-AWARE REFERENCE**: Accuracy {s_arch.accuracy * 100:.1f}%, Premature {s_arch.premature_interruption_rate * 100:.1f}%, Delay P50 {s_arch.response_delay_p50_ms:.0f} ms.",
+            f"- **USER-AWARE REFERENCE**: Accuracy {s_user.accuracy * 100:.1f}%, Premature {s_user.premature_interruption_rate * 100:.1f}%, Delay P50 {s_user.response_delay_p50_ms:.0f} ms.",
+            f"- **Headroom Analysis**: The gap between ARCHETYPE-AWARE REFERENCE ({s_arch.accuracy * 100:.1f}%) and USER-AWARE REFERENCE ({s_user.accuracy * 100:.1f}%) is {diff_user_arch * 100:+.1f}% [{ci_user_arch.low * 100:+.1f}%, {ci_user_arch.high * 100:+.1f}%], demonstrating little per-user headroom in this dataset (a dataset limitation). The Per-User Control heuristic ({s_ctrl.accuracy * 100:.1f}% accuracy) beats the user-aware reference ({s_user.accuracy * 100:.1f}%), proving that single-checkpoint references are not upper bounds for multi-checkpoint policies. Multi-checkpoint reference from known pause distributions was skipped under the 20-minute limit.",
             "",
             "### D. Calibration, Reliability & Conflict Rule",
             f"- **DEV Calibration**: Calibrated thresholds hi = {calib_thresh.hi:.2f}, lo = {calib_thresh.lo:.2f}, max_hold_ms = {calib_thresh.max_hold_ms:.0f} ms (DEV score = {calib_stats['dev_metrics']['score']:.4f}).",
             f"- **Probability Reliability**: DEV Brier score = {dev_reliability['brier_score']:.4f} ({dev_reliability['sample_count']} samples); TEST Brier score = {test_reliability['brier_score']:.4f} ({test_reliability['sample_count']} samples).",
             f"- **Q1+Q2 Conflict Rule Effect**: Across {total_eval_checkpoints} evaluated pause checkpoints on the test split, exactly {conflict_checkpoints} checkpoints exhibited conflict (Q1 p(RESPOND) >= {calib_thresh.hi:.2f} and Q2 p(YES) >= 0.50).",
+            "",
             "### E. Outcome & Summary Verdict",
-            f"- **Plain Language Outcome**: The Strands Decider 2B eliminates premature interruptions ({s_dec.premature_interruption_rate * 100:.1f}% premature rate across all personas), successfully prioritizing user comfort. However, because its predicted probability p(RESPOND) during mid-thought pauses rarely crosses the hi threshold ({calib_thresh.hi:.2f}), the policy holds the conversational floor until the safety ceiling (max_hold_ms = {calib_thresh.max_hold_ms:.0f} ms), yielding a response delay P50 of {s_dec.response_delay_p50_ms:.0f} ms. Consequently, the Decider does NOT beat the Text Heuristic ({s_heur.response_delay_p50_ms:.0f} ms delay) or the Per-User Control ({s_ctrl.response_delay_p50_ms:.0f} ms delay) on latency.",
+            "- **Plain Language Outcome**: Across both operating points (Point A equal delay budget and Point B equal premature budget), the Fixed Timeout and Text Heuristic baselines dominate the Strands Decider 2B. At Point A, Fixed Timeout achieves 800.0 ms delay P50, while Decider exhibits 1501.2 ms delay P50. At Point B, Fixed Timeout (950ms) achieves a 3.3% premature rate and 950.0 ms delay P50, whereas Decider exhibits 2200.0 ms delay P50 (+1353.2 ms slower). Decider does not beat the baselines at equal delay or equal premature budget.",
         ])
 
     t0_report = time.perf_counter()

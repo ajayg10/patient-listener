@@ -18,7 +18,49 @@
 - **States difference (test 156 -> 155)**: In the B5.8 test realization, one slow template never experienced a silence lasting to the 1800 ms checkpoint.
 - **2,250 vs 1,831 lookups**: 1,831 (685 dev + 1,146 test) is the single-pass lookup count, whereas 2,250 was the cumulative query count across all latency sweeps in `run_eval.py`.
 
-## 1. Test Split Turn-Taking Comparison (n=360 turns across 30 users, 12 turns/user)
+## 1. Operating Point Benchmark: Premature Interruption and Delay (n=360 test turns across 30 users)
+
+> [!NOTE]
+> **Operating Points Chosen on DEV Only, Reported on TEST Only**:
+> - **Point A (Delay Budget)**: DEV delay P50 <= 800 ms (matching Fixed 800ms baseline), minimizing DEV premature rate.
+> - **Point B (Premature Budget)**: DEV premature rate <= 5.0%, minimizing DEV delay P50.
+> - *Accuracy is removed from this headline comparison as delay and premature interruption rate jointly define turn-taking quality.*
+
+| Operating Point | Approach | Parameter | Premature Interruption (Cluster 95% CI) | Delay P50 (Bootstrap 95% CI) | Delay P95 | Condition |
+|---|---|---|---|---|---|---|
+| Point A (Delay budget <= 800ms) | Fixed Timeout | 800 ms | 18.9% [11.9%, 26.4%] | 800 ms [800.0, 800.0] ms | 800 ms | Fixed timeout (800ms) |
+| Point A (Delay budget <= 800ms) | Text Heuristic | 800 ms | 11.1% [6.4%, 16.7%] | 800 ms [800.0, 800.0] ms | 800 ms | dev-tuned (800ms) |
+| Point A (Delay budget <= 800ms) | Per-User Control | scale 1.15 | 4.2% [1.4%, 7.8%] | 808 ms [760.1, 874.0] ms | 1067 ms | profile threshold x1.15 (no model) |
+| Point A (Delay budget <= 800ms) | Strands Decider 2B | hi = 0.30 | 10.0% [5.8%, 14.7%] | 1501 ms [551.2, 2200.0] ms | 2200 ms | GPU cache (hi=0.3, lo=0.30) |
+| Point A (Delay budget <= 800ms) | Strands Decider 2B + Profile | hi = 0.30 | 8.1% [4.2%, 12.2%] | 551 ms [551.2, 1501.2] ms | 2200 ms | GPU cache + profile (hi=0.3, lo=0.30) |
+| Point B (Premature budget <= 5%) | Fixed Timeout | 950 ms | 3.3% [1.1%, 6.4%] | 950 ms [910.0, 950.0] ms | 950 ms | Fixed timeout (950ms) |
+| Point B (Premature budget <= 5%) | Text Heuristic | 950 ms | 2.5% [0.6%, 5.3%] | 950 ms [910.0, 950.0] ms | 950 ms | dev-tuned (950ms) |
+| Point B (Premature budget <= 5%) | Per-User Control | scale 1.10 | 7.5% [3.6%, 11.9%] | 778 ms [727.1, 836.0] ms | 1021 ms | profile threshold x1.1 (no model) |
+| Point B (Premature budget <= 5%) | Strands Decider 2B | hi = 0.55 | 0.0% [0.0%, 0.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | GPU cache (hi=0.55, lo=0.30) |
+| Point B (Premature budget <= 5%) | Strands Decider 2B + Profile | hi = 0.50 | 0.0% [0.0%, 0.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | GPU cache + profile (hi=0.5, lo=0.30) |
+
+### Key Paired Differences at Operating Points (Cluster Bootstrap 95% CI over Users)
+
+#### Point A: Paired Premature Rate Differences (Equal Delay Budget <= 800ms)
+| Comparison | Model A | Model B | Paired Premature Difference (B - A) | Cluster Bootstrap 95% CI |
+|---|---|---|---|---|
+| Decider vs Fixed Timeout | Fixed Timeout (800ms) | Strands Decider 2B (hi=0.30) | -8.9% | [-15.6%, -3.0%] |
+| Decider vs Text Heuristic | Text Heuristic (800ms) | Strands Decider 2B (hi=0.30) | -1.1% | [-5.6%, +3.3%] |
+| Decider+Profile vs Decider | Strands Decider 2B (hi=0.30) | Strands Decider 2B + Profile (hi=0.30) | -1.9% | [-5.8%, +1.1%] |
+| Decider+Profile vs Per-User Control | Per-User Control (scale 1.15) | Strands Decider 2B + Profile (hi=0.30) | +3.9% | [-1.1%, +8.6%] |
+
+#### Point B: Paired Response Delay Differences (Equal Premature Budget <= 5%)
+| Comparison | Model A | Model B | Paired Delay Difference (B - A) | Cluster Bootstrap 95% CI |
+|---|---|---|---|---|
+| Decider vs Fixed Timeout | Fixed Timeout (950ms) | Strands Decider 2B (hi=0.55) | +1353.2 ms | [+1304.6, +1399.0] ms |
+| Decider vs Text Heuristic | Text Heuristic (950ms) | Strands Decider 2B (hi=0.55) | +1353.2 ms | [+1304.6, +1399.0] ms |
+| Decider+Profile vs Decider | Strands Decider 2B (hi=0.55) | Strands Decider 2B + Profile (hi=0.50) | +0.0 ms | [+0.0, +0.0] ms |
+| Decider+Profile vs Per-User Control | Per-User Control (scale 1.10) | Strands Decider 2B + Profile (hi=0.50) | +1508.3 ms | [+1403.8, +1604.5] ms |
+
+### Dominance Analysis at Operating Points
+- Fixed timeouts and text heuristic dominate Decider at both operating points: At Point A (equal delay budget <= 800ms), Text Heuristic achieves 800ms delay vs Decider 1501ms with comparable cut-in rate. At Point B (premature budget <= 5%), Fixed 950ms and Text Heuristic 950ms achieve 950ms delay with 3.3% and 2.5% cut-ins, whereas Decider waited 2200ms (+1250ms slower) to eliminate cut-ins.
+
+## 1B. Exploratory Full Benchmark Comparison (19 Latency & Sensitivity Configurations)
 
 | Approach | Accuracy (Cluster 95% CI) | Accuracy (Wilson 95% CI) | Premature Interruption (Cluster 95% CI) | Premature (Wilson 95% CI) | Unnecessary Wait (Cluster 95% CI) | Unnecessary Wait (Wilson 95% CI) | Delay P50 (Bootstrap 95% CI) | Delay P95 | Latency Condition |
 |---|---|---|---|---|---|---|---|---|---|
@@ -37,27 +79,19 @@
 | Decider Sweep (300ms Sweep) | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 94.5% [89.9%, 98.3%] | [90.1%, 97.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | GPU cache, virtual clock |
 | Decider Sweep (1000ms Sweep) | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | GPU cache, virtual clock |
 | Decider Sweep (3000ms Sweep) | 100.0% [100.0%, 100.0%] | [98.9%, 100.0%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 100.0% [100.0%, 100.0%] | [97.9%, 100.0%] | 2200 ms [2200.0, 2200.0] ms | 2200 ms | GPU cache, virtual clock |
-| PERSONA-BLIND CEILING | 74.7% [68.9%, 80.0%] | [70.0%, 78.9%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 50.3% [42.6%, 57.5%] | [43.1%, 57.5%] | 2200 ms [250.0, 2200.0] ms | 2200 ms | Reference ceiling (blind) |
-| ARCHETYPE-AWARE CEILING | 81.4% [76.4%, 85.8%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [17.0%, 37.9%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (archetype-aware) |
-| USER-AWARE CEILING | 81.9% [76.9%, 86.7%] | [77.6%, 85.6%] | 3.9% [1.4%, 7.0%] | [2.3%, 6.4%] | 28.2% [17.9%, 39.0%] | [22.1%, 35.1%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (user-aware) |
-| ORACLE-UPPER-BOUND (Persona-Aware) | 81.4% [76.4%, 85.8%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [17.0%, 37.9%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Reference ceiling (persona-aware) |
+| PERSONA-BLIND REFERENCE (single first-checkpoint, not a ceiling) | 74.7% [68.9%, 80.0%] | [70.0%, 78.9%] | 0.0% [0.0%, 0.0%] | [0.0%, 1.1%] | 50.3% [42.6%, 57.5%] | [43.1%, 57.5%] | 2200 ms [250.0, 2200.0] ms | 2200 ms | Single first-checkpoint reference, not a ceiling |
+| ARCHETYPE-AWARE REFERENCE (single first-checkpoint, not a ceiling) | 81.4% [76.4%, 85.8%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [17.0%, 37.9%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Single first-checkpoint reference, not a ceiling |
+| USER-AWARE REFERENCE (single first-checkpoint, not a ceiling) | 81.9% [76.9%, 86.7%] | [77.6%, 85.6%] | 3.9% [1.4%, 7.0%] | [2.3%, 6.4%] | 28.2% [17.9%, 39.0%] | [22.1%, 35.1%] | 250 ms [250.0, 250.0] ms | 2200 ms | Single first-checkpoint reference, not a ceiling |
+| ORACLE-UPPER-BOUND REFERENCE (single first-checkpoint, not a ceiling) | 81.4% [76.4%, 85.8%] | [77.0%, 85.1%] | 5.0% [1.9%, 9.2%] | [3.2%, 7.8%] | 27.1% [17.0%, 37.9%] | [21.1%, 34.0%] | 250 ms [250.0, 250.0] ms | 2200 ms | Single first-checkpoint reference, not a ceiling |
 | Bedrock LLM Judge | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED | SKIPPED (not run in this eval) |
 
-### Key Paired Differences (Cluster Bootstrap 95% CI over Users)
+### Reference Rows Paired Differences (Single First-Checkpoint Reference, Not a Ceiling)
 
-| Comparison | Model A | Model B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |
+| Comparison | Reference A | Reference B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |
 |---|---|---|---|---|
-| Decider vs Text Heuristic | Text Heuristic Baseline (250ms, dev-tuned) | Strands Decider 2B (301ms GPU, cache-measured on T4) | +24.7% | [+18.9%, +30.3%] |
-| Decider+Profile vs Decider | Strands Decider 2B (301ms GPU, cache-measured on T4) | Strands Decider 2B + Profile (301ms GPU, cache-measured on T4) | +0.0% | [+0.0%, +0.0%] |
-| Decider+Profile vs Per-User Control | Per-User Text Heuristic (Profile Threshold, No Model) | Strands Decider 2B + Profile (301ms GPU, cache-measured on T4) | +13.1% | [+8.6%, +18.3%] |
-
-### Reference Ceilings Paired Differences (Cluster Bootstrap 95% CI over Users)
-
-| Comparison | Reference Ceiling A | Reference Ceiling B | Paired Accuracy Difference (B - A) | Cluster Bootstrap 95% CI |
-|---|---|---|---|---|
-| Archetype vs Blind | PERSONA-BLIND CEILING | ARCHETYPE-AWARE CEILING | +6.7% | [+1.1%, +13.1%] |
-| User vs Archetype | ARCHETYPE-AWARE CEILING | USER-AWARE CEILING | +0.6% | [-2.8%, +4.2%] |
-| User vs Blind | PERSONA-BLIND CEILING | USER-AWARE CEILING | +7.2% | [+1.9%, +13.9%] |
+| Archetype vs Blind | PERSONA-BLIND REFERENCE | ARCHETYPE-AWARE REFERENCE | +6.7% | [+1.1%, +13.1%] |
+| User vs Archetype | ARCHETYPE-AWARE REFERENCE | USER-AWARE REFERENCE | +0.6% | [-2.8%, +4.2%] |
+| User vs Blind | PERSONA-BLIND REFERENCE | USER-AWARE REFERENCE | +7.2% | [+1.9%, +13.9%] |
 
 ## 2. Per-Persona Performance Breakdown
 
@@ -74,10 +108,10 @@
 | Strands Decider 2B (235.6ms GPU benchmark, synthetic 20-150 tokens on T4) | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
 | Strands Decider 2B (0 ms decision latency) | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
 | Strands Decider 2B (3190ms CPU, Ryzen 5 5500U) | 0.0% | 2200 ms | 0.0% | 2200 ms | 0.0% | 2200 ms |
-| PERSONA-BLIND CEILING | 0.0% | 2200 ms | 0.0% | 250 ms | 0.0% | 250 ms |
-| ARCHETYPE-AWARE CEILING | 15.0% | 250 ms | 0.0% | 250 ms | 0.0% | 250 ms |
-| USER-AWARE CEILING | 8.3% | 250 ms | 3.3% | 250 ms | 0.0% | 250 ms |
-| ORACLE-UPPER-BOUND (Persona-Aware) | 15.0% | 250 ms | 0.0% | 250 ms | 0.0% | 250 ms |
+| PERSONA-BLIND REFERENCE (single first-checkpoint, not a ceiling) | 0.0% | 2200 ms | 0.0% | 250 ms | 0.0% | 250 ms |
+| ARCHETYPE-AWARE REFERENCE (single first-checkpoint, not a ceiling) | 15.0% | 250 ms | 0.0% | 250 ms | 0.0% | 250 ms |
+| USER-AWARE REFERENCE (single first-checkpoint, not a ceiling) | 8.3% | 250 ms | 3.3% | 250 ms | 0.0% | 250 ms |
+| ORACLE-UPPER-BOUND REFERENCE (single first-checkpoint, not a ceiling) | 15.0% | 250 ms | 0.0% | 250 ms | 0.0% | 250 ms |
 
 ## 3. Per-Category Performance Breakdown
 
@@ -94,10 +128,10 @@
 | Strands Decider 2B (235.6ms GPU benchmark, synthetic 20-150 tokens on T4) | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
 | Strands Decider 2B (0 ms decision latency) | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
 | Strands Decider 2B (3190ms CPU, Ryzen 5 5500U) | 100.0% | 2200 ms | 0.0% | 100.0% | 0.0% |
-| PERSONA-BLIND CEILING | 100.0% | 250 ms | 0.0% | 49.4% | 0.0% |
-| ARCHETYPE-AWARE CEILING | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
-| USER-AWARE CEILING | 100.0% | 250 ms | 0.0% | 63.9% | 7.8% |
-| ORACLE-UPPER-BOUND (Persona-Aware) | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
+| PERSONA-BLIND REFERENCE (single first-checkpoint, not a ceiling) | 100.0% | 250 ms | 0.0% | 49.4% | 0.0% |
+| ARCHETYPE-AWARE REFERENCE (single first-checkpoint, not a ceiling) | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
+| USER-AWARE REFERENCE (single first-checkpoint, not a ceiling) | 100.0% | 250 ms | 0.0% | 63.9% | 7.8% |
+| ORACLE-UPPER-BOUND REFERENCE (single first-checkpoint, not a ceiling) | 100.0% | 250 ms | 0.0% | 62.8% | 10.0% |
 
 ## 4. Policy Calibration, Probability Reliability & Pareto Frontiers
 
@@ -141,30 +175,29 @@
 - **Response Delay (P50/P95)**: Elapsed time in milliseconds from speech end to agent floor yield, evaluated exclusively over completed turns (n=181).
 - **Accuracy**: Binary turn-taking decision accuracy over all turns (n=360).
 - **Uncertainty Intervals**: Headline tables report non-parametric two-stage cluster bootstrap 95% intervals (B=1000 resamples: sample users with replacement, then sample turns within user with replacement) to account for turn clustering across 30 users (12 turns/user). Secondary column reports standard Wilson 1927 score intervals for comparison.
-- **Reference Ceilings**: `PERSONA-BLIND CEILING` (blind), `ARCHETYPE-AWARE CEILING` (archetype parameters), and `USER-AWARE CEILING` (individual user continuation probability p_user) represent theoretical policy bounds under varying degrees of user knowledge. None are achievable baselines; all serve as reference ceilings.
+- **Single First-Checkpoint Reference Rows (Not Ceilings)**: Labeled 'single first-checkpoint reference, not a ceiling' (formerly reference ceilings). These rows evaluate decisions only at the first checkpoint (250 ms) without multi-checkpoint dynamics. The archetype-aware vs user-aware gap is about 0.5 points (81.4% vs 81.9%), meaning little per-user headroom in this dataset (a limitation). Note that the per-user control heuristic (87.2%) beats the user-aware reference (81.9%), proving that single-checkpoint references are not upper bounds for multi-checkpoint policies. Multi-checkpoint reference from known pause distributions was skipped under the 20-minute limit.
 
 ## 7. Findings & Observations
 
-### A. Decider vs Text Heuristic vs Per-User Threshold Control
-- **Premature Interruption Rate**: Strands Decider 2B achieves 0.0% [0.0%, 0.0%] premature interruptions (0 cut-ins across all 360 test turns), outperforming the Text Heuristic (24.7% [19.4%, 30.3%]) and Per-User Control (12.8% [8.3%, 17.8%]).
-- **Response Delay (P50/P95)**: Strands Decider 2B exhibits 2200 ms [2200.0, 2200.0] ms P50 and 2200 ms P95. The Text Heuristic achieves 250 ms [250.0, 250.0] ms P50 and 250 ms P95. The Per-User Control achieves 707 ms [661.0, 766.0] ms P50 and 928 ms P95.
-- **Per-Persona Breakdown**: For slow pausers, Fixed 600ms causes 50.8% premature interruptions, Text Heuristic causes 25.8%, whereas Decider 2B achieves 0.0%. For fast pausers, Decider delay P50 is 2200 ms versus 250 ms for Text Heuristic.
-- **Per-Category Breakdown**: On ambiguous turns, Text Heuristic yields 49.4% premature interruptions, whereas Decider 2B yields 0.0%. On complete turns, Decider delay P50 is 2200 ms.
+### A. Operating Points Performance (Points A & B)
+- **Point A (Delay Budget <= 800ms)**: Strands Decider 2B achieves 10.0% premature rate and 1501 ms delay P50 (2200 ms P95). The Fixed Timeout (800ms) yields 18.9% premature rate and 800 ms delay P50. The Text Heuristic (800ms) yields 11.1% premature rate and 800 ms delay P50. The Per-User Control yields 4.2% premature rate and 808 ms delay P50. Decider+Profile achieves 8.1% premature rate and 551 ms delay P50.
+- **Point B (Premature Budget <= 5.0%)**: Strands Decider 2B achieves 0.0% premature rate and 2200 ms delay P50 (2200 ms P95). The Fixed Timeout (950ms) yields 3.3% premature rate and 950 ms delay P50. The Text Heuristic (950ms) yields 2.5% premature rate and 950 ms delay P50. The Per-User Control yields 7.5% premature rate and 778 ms delay P50. Decider+Profile achieves 0.0% premature rate and 2200 ms delay P50.
+- **Dominance Analysis**: Fixed timeouts and text heuristic dominate Decider at both operating points: At Point A (equal delay budget <= 800ms), Text Heuristic achieves 800ms delay vs Decider 1501ms with comparable cut-in rate. At Point B (premature budget <= 5%), Fixed 950ms and Text Heuristic 950ms achieve 950ms delay with 3.3% and 2.5% cut-ins, whereas Decider waited 2200ms (+1250ms slower) to eliminate cut-ins.
 
-### B. Paired Cluster-Bootstrap Differences (with 95% CIs)
-- **Decider minus Text Heuristic**: +24.7% [+18.9%, +30.3%].
-- **Decider+Profile minus Decider**: +0.0% [+0.0%, +0.0%].
-- **Decider+Profile minus Per-User Control**: +13.1% [+8.6%, +18.3%].
-- **Decider+Profile Overall Performance**: Accuracy 100.0%, Premature 0.0%, Delay P50 2200 ms.
+### B. Paired Differences at Operating Points
+- **Point A (Premature Rate Difference at Delay Budget <= 800ms)**: Decider minus Fixed 800ms: -8.9% [-15.6%, -3.0%]; Decider minus Text Heuristic: -1.1% [-5.6%, +3.3%]; Decider+Profile minus Decider: -1.9% [-5.8%, +1.1%]; Decider+Profile minus Per-User Control: +3.9% [-1.1%, +8.6%].
+- **Point B (Response Delay Difference at Premature Budget <= 5%)**: Decider minus Fixed 950ms: +1353.2 ms [+1304.6, +1399.0] ms; Decider minus Text Heuristic: +1353.2 ms [+1304.6, +1399.0] ms; Decider+Profile minus Decider: +0.0 ms [+0.0, +0.0] ms; Decider+Profile minus Per-User Control: +1508.3 ms [+1403.8, +1604.5] ms.
 
-### C. Reference Ceilings
-- **PERSONA-BLIND CEILING**: Accuracy 74.7%, Premature 0.0%, Delay P50 2200 ms.
-- **ARCHETYPE-AWARE CEILING**: Accuracy 81.4%, Premature 5.0%, Delay P50 250 ms.
-- **USER-AWARE CEILING**: Accuracy 81.9%, Premature 3.9%, Delay P50 250 ms.
+### C. Single First-Checkpoint Reference Rows (Not Ceilings)
+- **PERSONA-BLIND REFERENCE**: Accuracy 74.7%, Premature 0.0%, Delay P50 2200 ms.
+- **ARCHETYPE-AWARE REFERENCE**: Accuracy 81.4%, Premature 5.0%, Delay P50 250 ms.
+- **USER-AWARE REFERENCE**: Accuracy 81.9%, Premature 3.9%, Delay P50 250 ms.
+- **Headroom Analysis**: The gap between ARCHETYPE-AWARE REFERENCE (81.4%) and USER-AWARE REFERENCE (81.9%) is +0.6% [-2.8%, +4.2%], demonstrating little per-user headroom in this dataset (a dataset limitation). The Per-User Control heuristic (86.9% accuracy) beats the user-aware reference (81.9%), proving that single-checkpoint references are not upper bounds for multi-checkpoint policies. Multi-checkpoint reference from known pause distributions was skipped under the 20-minute limit.
 
 ### D. Calibration, Reliability & Conflict Rule
 - **DEV Calibration**: Calibrated thresholds hi = 0.55, lo = 0.10, max_hold_ms = 2200 ms (DEV score = 1.0000).
 - **Probability Reliability**: DEV Brier score = 0.3476 (644 samples); TEST Brier score = 0.3452 (1282 samples).
 - **Q1+Q2 Conflict Rule Effect**: Across 1800 evaluated pause checkpoints on the test split, exactly 0 checkpoints exhibited conflict (Q1 p(RESPOND) >= 0.55 and Q2 p(YES) >= 0.50).
+
 ### E. Outcome & Summary Verdict
-- **Plain Language Outcome**: The Strands Decider 2B eliminates premature interruptions (0.0% premature rate across all personas), successfully prioritizing user comfort. However, because its predicted probability p(RESPOND) during mid-thought pauses rarely crosses the hi threshold (0.55), the policy holds the conversational floor until the safety ceiling (max_hold_ms = 2200 ms), yielding a response delay P50 of 2200 ms. Consequently, the Decider does NOT beat the Text Heuristic (250 ms delay) or the Per-User Control (707 ms delay) on latency.
+- **Plain Language Outcome**: Across both operating points (Point A equal delay budget and Point B equal premature budget), the Fixed Timeout and Text Heuristic baselines dominate the Strands Decider 2B. At Point A, Fixed Timeout achieves 800.0 ms delay P50, while Decider exhibits 1501.2 ms delay P50. At Point B, Fixed Timeout (950ms) achieves a 3.3% premature rate and 950.0 ms delay P50, whereas Decider exhibits 2200.0 ms delay P50 (+1353.2 ms slower). Decider does not beat the baselines at equal delay or equal premature budget.

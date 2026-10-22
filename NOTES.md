@@ -1453,6 +1453,7 @@
   * Decider+Profile (Argmax): Policy triggers = 0 / 181, Cap triggers = 181 / 181 | Premature = 0.0%, Delay P50 = 2200.0 ms, Delay P95 = 2200.0 ms.
 
 ## Article material (running list)
+- **Progress note (fix: relabel reference rows and lead with premature and delay)**: Relabeled reference rows as single first-checkpoint references across results.md, results JSON, and UI, documented ~0.5 point user headroom limitation, and led headline table with premature rate and delay P50/P95 at operating points A and B.
 - **Progress note (feat: add operating point analysis)**: Implemented DEV operating point sweeps (Points A and B) and paired cluster bootstrap evaluation across 5 families with dominance analysis.
 - **Progress note (docs: audit decider policy calibration)**: Documented calibration objective audit, p(done) and p(mid_thought) distributions, policy vs cap trigger fractions, and argmax reference rows in NOTES.md.
 - **Progress note (fix: read decision latency label from provenance)**: Configured default cache to real 8,450-record cache with 301.2 ms latency; wired dynamic latency and source from /health and provenance JSON into API endpoints and frontend banners.
