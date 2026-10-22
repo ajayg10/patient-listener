@@ -54,7 +54,10 @@ export const App: React.FC = () => {
   const [replayError, setReplayError] = useState<string | null>(null);
 
   // Live Engine Tracking
-  const [transcript, setTranscript] = useState<string>("");
+  const [fixedTranscript, setFixedTranscript] = useState<string>("");
+  const [plTranscript, setPlTranscript] = useState<string>("");
+  const fixedRespondedRef = useRef<boolean>(false);
+  const plRespondedRef = useRef<boolean>(false);
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
   const [currentSilenceMs, setCurrentSilenceMs] = useState<number>(0);
   const [speechSegments, setSpeechSegments] = useState<SpeechSegment[]>([]);
@@ -130,7 +133,10 @@ export const App: React.FC = () => {
   const isMock = health?.cache_provenance?.is_mock ?? (health?.cache_provenance?.backend === "mock");
 
   const resetReplayState = () => {
-    setTranscript("");
+    fixedRespondedRef.current = false;
+    plRespondedRef.current = false;
+    setFixedTranscript("");
+    setPlTranscript("");
     setCurrentTimeMs(0);
     setCurrentSilenceMs(0);
     setSpeechSegments([]);
@@ -169,8 +175,14 @@ export const App: React.FC = () => {
         break;
       }
       case "speechdelta": {
-        if (ev.text) {
-          setTranscript(ev.text);
+        const text = ev.text;
+        if (text) {
+          if (!fixedRespondedRef.current) {
+            setFixedTranscript((prev) => (prev ? `${prev} ${text}` : text));
+          }
+          if (!plRespondedRef.current) {
+            setPlTranscript((prev) => (prev ? `${prev} ${text}` : text));
+          }
         }
         break;
       }
@@ -206,12 +218,14 @@ export const App: React.FC = () => {
       }
       case "respond": {
         if (ev.engine === "fixed") {
+          fixedRespondedRef.current = true;
           setFixedState((prev) => ({
             ...prev,
             responded: true,
             respondedAtMs: ev.t_ms,
           }));
         } else if (ev.engine === "patient_listener") {
+          plRespondedRef.current = true;
           setPlState((prev) => ({
             ...prev,
             responded: true,
@@ -222,6 +236,9 @@ export const App: React.FC = () => {
       }
       case "final": {
         if (ev.engine === "fixed") {
+          if (ev.interrupted) {
+            fixedRespondedRef.current = true;
+          }
           setFixedState((prev) => ({
             ...prev,
             interrupted: ev.interrupted,
@@ -233,6 +250,9 @@ export const App: React.FC = () => {
             fixedDelays: ev.response_delay_ms !== null ? [...prev.fixedDelays, ev.response_delay_ms] : prev.fixedDelays,
           }));
         } else if (ev.engine === "patient_listener") {
+          if (ev.interrupted) {
+            plRespondedRef.current = true;
+          }
           setPlState((prev) => ({
             ...prev,
             interrupted: ev.interrupted,
@@ -604,7 +624,7 @@ export const App: React.FC = () => {
                       Live Spoken Audio Transcript
                     </span>
                     <div className="bg-slate-950 rounded-lg p-3 min-h-[90px] border border-slate-800/80 text-sm leading-relaxed font-sans text-slate-200">
-                      {transcript || (
+                      {fixedTranscript || (
                         <span className="text-slate-600 italic">Waiting for speech input...</span>
                       )}
                     </div>
@@ -700,7 +720,7 @@ export const App: React.FC = () => {
                       Live Spoken Audio Transcript
                     </span>
                     <div className="bg-slate-950 rounded-lg p-3 min-h-[90px] border border-slate-800/80 text-sm leading-relaxed font-sans text-slate-200">
-                      {transcript || (
+                      {plTranscript || (
                         <span className="text-slate-600 italic">Waiting for speech input...</span>
                       )}
                     </div>

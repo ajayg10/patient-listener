@@ -1453,6 +1453,7 @@
   * Decider+Profile (Argmax): Policy triggers = 0 / 181, Cap triggers = 181 / 181 | Premature = 0.0%, Delay P50 = 2200.0 ms, Delay P95 = 2200.0 ms.
 
 ## Article material (running list)
+- **Progress note (fix: accumulate transcript per engine)**: Split transcript into per-engine streams (Fixed vs Patient Listener) accumulating incoming words until each engine responds or cuts off, resolving the UI issue where latest segment overwrote previous words.
 - **Progress note (fix: show response timing relative to true end)**: Updated delay line to show timing relative to true end ("answered X ms before user finished" or "answered X ms after true end" or "no answer"), with pure function unit tests.
 - **Progress note (fix: derive result line from final events)**: Implemented formatResultLine pure function with 3 cases strictly from final events and error states, with unit test verification.
 - **Progress note (docs: record operating point results)**: Documented DEV-selected operating points A and B, cluster bootstrap differences, dominance findings (Fixed timeout and heuristic dominate Decider), and demo scenario delays in results.md and NOTES.md.
