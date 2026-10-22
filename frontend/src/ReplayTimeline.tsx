@@ -68,8 +68,26 @@ export const ReplayTimeline: React.FC<ReplayTimelineProps> = ({
         </div>
       </div>
 
+      {/* True End Marker Flag Row (Above Track so it never covers speech bars or ticks) */}
+      <div className="relative w-full h-5 select-none overflow-visible">
+        {trueEndTimeMs > 0 && (
+          <div
+            className="absolute top-0 z-10 flex flex-col items-center pointer-events-none"
+            style={{
+              left: `clamp(45px, ${toPercent(trueEndTimeMs)}%, calc(100% - 45px))`,
+              transform: "translateX(-50%)",
+            }}
+          >
+            <span className="px-1.5 py-0.5 bg-amber-400 text-slate-950 font-bold text-[9px] rounded uppercase shadow-sm whitespace-nowrap">
+              True End ({Math.round(trueEndTimeMs)}ms)
+            </span>
+            <div className="w-0.5 h-1 bg-amber-400" />
+          </div>
+        )}
+      </div>
+
       {/* Main Track */}
-      <div className="relative w-full h-14 bg-slate-950/80 border border-slate-800 rounded-lg overflow-hidden my-2">
+      <div className="relative w-full h-24 bg-slate-950/80 border border-slate-800 rounded-lg overflow-hidden my-1">
         {/* Background grid lines every 1000ms */}
         {Array.from({ length: Math.ceil(maxTime / 1000) }).map((_, idx) => {
           const tMs = idx * 1000;
@@ -77,13 +95,49 @@ export const ReplayTimeline: React.FC<ReplayTimelineProps> = ({
           return (
             <div
               key={idx}
-              className="absolute top-0 bottom-0 border-l border-slate-800/60 text-[9px] text-slate-600 pl-1 pt-0.5 select-none"
+              className="absolute top-0 bottom-0 border-l border-slate-800/60 text-[9px] text-slate-600 pl-1 bottom-0.5 flex items-end select-none pointer-events-none"
               style={{ left: `${leftPct}%` }}
             >
               {tMs}ms
             </div>
           );
         })}
+
+        {/* True End Marker (Dashed vertical line through the track) */}
+        {trueEndTimeMs > 0 && (
+          <div
+            className="absolute top-0 bottom-0 border-r-2 border-dashed border-amber-400/80 z-10 pointer-events-none"
+            style={{ left: `${toPercent(trueEndTimeMs)}%` }}
+          />
+        )}
+
+        {/* Patient Listener Engine Marker (Above speech bar) */}
+        {plResult.respondedAtMs !== null && (
+          <div
+            className="absolute top-1 z-20 transition-all flex flex-col items-center"
+            style={{
+              left: `clamp(45px, ${toPercent(plResult.respondedAtMs)}%, calc(100% - 45px))`,
+              transform: "translateX(-50%)",
+            }}
+          >
+            <span
+              className={`text-[9px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded shadow mb-0.5 ${
+                plResult.interrupted
+                  ? "bg-rose-950 text-rose-300 border border-rose-600"
+                  : "bg-emerald-950 text-emerald-300 border border-emerald-600"
+              }`}
+            >
+              Decider {Math.round(plResult.respondedAtMs)}ms
+            </span>
+            <div
+              className={`w-3.5 h-3.5 rounded-full border-2 shadow-md ${
+                plResult.interrupted
+                  ? "bg-rose-500 border-white"
+                  : "bg-emerald-400 border-slate-950"
+              }`}
+            />
+          </div>
+        )}
 
         {/* User Speaking Segments */}
         {speechSegments.map((seg, idx) => {
@@ -92,30 +146,21 @@ export const ReplayTimeline: React.FC<ReplayTimelineProps> = ({
           return (
             <div
               key={idx}
-              className="absolute top-2.5 h-4 bg-indigo-500/80 hover:bg-indigo-400 rounded-sm transition-all border border-indigo-400/40"
+              className="absolute top-9 h-6 bg-indigo-500/80 hover:bg-indigo-400 rounded-sm transition-all border border-indigo-400/40"
               style={{ left: `${left}%`, width: `${width}%` }}
               title={`Speech: ${Math.round(seg.startMs)}ms - ${Math.round(seg.endMs)}ms`}
             />
           );
         })}
 
-        {/* True End Marker (Dashed flag line) */}
-        {trueEndTimeMs > 0 && (
-          <div
-            className="absolute top-0 bottom-0 border-r-2 border-dashed border-amber-400 z-10"
-            style={{ left: `${toPercent(trueEndTimeMs)}%` }}
-          >
-            <span className="absolute -top-1 -right-2 px-1.5 py-0.5 bg-amber-400 text-slate-950 font-bold text-[9px] rounded uppercase shadow-sm">
-              True End ({Math.round(trueEndTimeMs)}ms)
-            </span>
-          </div>
-        )}
-
-        {/* Fixed Engine Marker */}
+        {/* Fixed Engine Marker (Below speech bar) */}
         {fixedResult.respondedAtMs !== null && (
           <div
-            className="absolute top-7 z-20 transition-all flex flex-col items-center"
-            style={{ left: `${toPercent(fixedResult.respondedAtMs)}%` }}
+            className="absolute bottom-4 z-20 transition-all flex flex-col items-center"
+            style={{
+              left: `clamp(40px, ${toPercent(fixedResult.respondedAtMs)}%, calc(100% - 40px))`,
+              transform: "translateX(-50%)",
+            }}
           >
             <div
               className={`w-3.5 h-3.5 rounded-full border-2 shadow-md ${
@@ -125,7 +170,7 @@ export const ReplayTimeline: React.FC<ReplayTimelineProps> = ({
               }`}
             />
             <span
-              className={`text-[9px] font-semibold whitespace-nowrap px-1 py-0.5 rounded shadow mt-0.5 ${
+              className={`text-[9px] font-semibold whitespace-nowrap px-1.5 py-0.5 rounded shadow mt-0.5 ${
                 fixedResult.interrupted
                   ? "bg-rose-950 text-rose-300 border border-rose-600"
                   : "bg-slate-800 text-amber-300 border border-slate-600"
@@ -136,38 +181,13 @@ export const ReplayTimeline: React.FC<ReplayTimelineProps> = ({
           </div>
         )}
 
-        {/* Patient Listener Engine Marker */}
-        {plResult.respondedAtMs !== null && (
-          <div
-            className="absolute top-0 z-20 transition-all flex flex-col items-center"
-            style={{ left: `${toPercent(plResult.respondedAtMs)}%` }}
-          >
-            <div
-              className={`w-3.5 h-3.5 rounded-full border-2 shadow-md ${
-                plResult.interrupted
-                  ? "bg-rose-500 border-white"
-                  : "bg-emerald-400 border-slate-950"
-              }`}
-            />
-            <span
-              className={`text-[9px] font-semibold whitespace-nowrap px-1 py-0.5 rounded shadow ${
-                plResult.interrupted
-                  ? "bg-rose-950 text-rose-300 border border-rose-600"
-                  : "bg-emerald-950 text-emerald-300 border border-emerald-600"
-              }`}
-            >
-              Decider {Math.round(plResult.respondedAtMs)}ms
-            </span>
-          </div>
-        )}
-
         {/* Live Playhead Marker */}
         {currentTimeMs > 0 && (
           <div
-            className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] z-30"
+            className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] z-30 pointer-events-none"
             style={{ left: `${toPercent(currentTimeMs)}%` }}
           >
-            <div className="w-2 h-2 -ml-[3px] bg-cyan-400 rotate-45" />
+            <div className="w-2.5 h-2.5 -ml-[4px] bg-cyan-400 rotate-45" />
           </div>
         )}
       </div>
