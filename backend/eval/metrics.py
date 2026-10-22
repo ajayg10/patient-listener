@@ -169,19 +169,31 @@ def cluster_bootstrap_paired_difference_ci(
     records_a: list[dict[str, Any]],
     records_b: list[dict[str, Any]],
     cluster_key: str = "user_id",
+    metric: str = "accuracy",
     n_resamples: int = 1000,
     alpha: float = 0.05,
     seed: int = 42,
 ) -> tuple[float, ConfidenceInterval]:
-    """Non-parametric two-stage cluster bootstrap interval for paired difference in accuracy (B - A). Vectorized."""
-    map_a = {r["id"]: (1.0 if r["predicted_action"] == r["ground_truth"] else 0.0) for r in records_a}
-    map_b = {r["id"]: (1.0 if r["predicted_action"] == r["ground_truth"] else 0.0) for r in records_b}
+    """Non-parametric two-stage cluster bootstrap interval for paired difference (B - A). Vectorized."""
+    def extract_val(r: dict[str, Any]) -> float:
+        if metric == "premature":
+            return 1.0 if (r["predicted_action"] == "RESPOND" and not r["is_turn_complete"]) else 0.0
+        elif metric == "delay":
+            return max(0.0, float(r["action_timestamp_ms"] - r["turn_end_t"]))
+        return 1.0 if r["predicted_action"] == r["ground_truth"] else 0.0
+
+    map_a = {r["id"]: r for r in records_a}
+    map_b = {r["id"]: r for r in records_b}
 
     paired_by_user: dict[str, list[float]] = {}
-    for r in records_a:
-        tid = r["id"]
-        uid = r.get(cluster_key, "default")
-        diff_val = map_b.get(tid, 0.0) - map_a[tid]
+    for tid, r_a in map_a.items():
+        if tid not in map_b:
+            continue
+        r_b = map_b[tid]
+        if metric == "delay" and not r_a.get("is_turn_complete", False):
+            continue
+        uid = r_a.get(cluster_key, "default")
+        diff_val = extract_val(r_b) - extract_val(r_a)
         paired_by_user.setdefault(uid, []).append(diff_val)
 
     all_diffs = [d for diffs in paired_by_user.values() for d in diffs]

@@ -1453,6 +1453,7 @@
   * Decider+Profile (Argmax): Policy triggers = 0 / 181, Cap triggers = 181 / 181 | Premature = 0.0%, Delay P50 = 2200.0 ms, Delay P95 = 2200.0 ms.
 
 ## Article material (running list)
+- **Progress note (feat: add operating point analysis)**: Implemented DEV operating point sweeps (Points A and B) and paired cluster bootstrap evaluation across 5 families with dominance analysis.
 - **Progress note (docs: audit decider policy calibration)**: Documented calibration objective audit, p(done) and p(mid_thought) distributions, policy vs cap trigger fractions, and argmax reference rows in NOTES.md.
 - **Progress note (fix: read decision latency label from provenance)**: Configured default cache to real 8,450-record cache with 301.2 ms latency; wired dynamic latency and source from /health and provenance JSON into API endpoints and frontend banners.
 - **Progress note (feat: pick demo scenarios from real cache)**: Selected 10 balanced demo scenarios (5 slow_pauser, 5 filler_heavy) from 68 qualifying cases on real Tesla T4 cache.

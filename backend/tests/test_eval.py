@@ -348,5 +348,29 @@ def test_results_md_counts_match_table():
             )
 
 
+def test_operating_points_analysis_results():
+    """Verify that operating points A and B are present and satisfy budget constraints."""
+    json_path = DATA_DIR.parent / "results" / "eval_results.json"
+    assert json_path.exists(), "eval_results.json must exist"
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert "operating_points" in data
+    op = data["operating_points"]
+    assert "point_a" in op
+    assert "point_b" in op
+    assert "paired_differences_point_a" in op
+    assert "paired_differences_point_b" in op
+
+    # At Point A, Fixed Timeout and Heuristic delay <= 800ms
+    assert op["point_a"]["Fixed Timeout"]["delay_p50_ms"] <= 800.0
+    assert op["point_a"]["Text Heuristic"]["delay_p50_ms"] <= 800.0
+
+    # At Point B, Fixed Timeout, Heuristic, and Decider premature <= 5%
+    assert op["point_b"]["Fixed Timeout"]["premature_rate"] <= 0.05
+    assert op["point_b"]["Text Heuristic"]["premature_rate"] <= 0.05
+    assert op["point_b"]["Decider"]["premature_rate"] <= 0.05
+
+
 
 

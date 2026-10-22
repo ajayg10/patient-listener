@@ -49,7 +49,7 @@ from backend.app.decider_service import (
 from backend.app.questions import TURN_COMPLETE_QUESTION
 from backend.app.state_builder import StateBuilder
 
-CACHE_PATH = REPO_ROOT / "backend" / "eval" / "data" / "decisions_cache.jsonl"
+CACHE_PATH = REPO_ROOT / "backend" / "eval" / "data" / "decisions_cache_real.jsonl"
 DEV_DATA_PATH = REPO_ROOT / "backend" / "eval" / "data" / "dev_turns.jsonl"
 TEST_DATA_PATH = REPO_ROOT / "backend" / "eval" / "data" / "test_turns.jsonl"
 
