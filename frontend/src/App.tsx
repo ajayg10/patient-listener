@@ -26,6 +26,14 @@ interface DecisionEntry {
   arrivalMs: number;
 }
 
+interface ReplayErrorInfo {
+  message: string;
+  engine?: string;
+  checkpoint_ms?: number;
+  state_key?: string;
+  state_text?: string;
+}
+
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"demo" | "results">("demo");
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -51,7 +59,7 @@ export const App: React.FC = () => {
     plDelays: [],
   });
 
-  const [replayError, setReplayError] = useState<string | null>(null);
+  const [replayError, setReplayError] = useState<ReplayErrorInfo | null>(null);
 
   // Live Engine Tracking
   const [fixedTranscript, setFixedTranscript] = useState<string>("");
@@ -159,7 +167,17 @@ export const App: React.FC = () => {
 
   const handleEvent = (ev: ReplayEvent) => {
     if (ev.event === "error") {
-      setReplayError(ev.message || ev.error || "Cache miss error during replay");
+      const shortMsg =
+        ev.error === "cache_miss"
+          ? `Cache miss: ${ev.engine ?? "patient_listener"} at ${ev.checkpoint_ms ?? "?"}ms`
+          : ev.message || ev.error || "Cache miss error during replay";
+      setReplayError({
+        message: shortMsg,
+        engine: ev.engine,
+        checkpoint_ms: ev.checkpoint_ms,
+        state_key: ev.state_key,
+        state_text: ev.state_text,
+      });
       setIsRunning(false);
       return;
     }
@@ -300,7 +318,7 @@ export const App: React.FC = () => {
         console.log("Replay aborted by user");
       } else {
         const msg = err instanceof Error ? err.message : String(err);
-        setReplayError(msg);
+        setReplayError({ message: msg });
       }
       setIsRunning(false);
       return false;
@@ -549,17 +567,41 @@ export const App: React.FC = () => {
 
             {/* Error Banner */}
             {replayError && (
-              <div className="p-4 bg-rose-950/80 border border-rose-500 rounded-xl text-rose-200 text-xs flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                  <span>{replayError}</span>
+              <div className="p-4 bg-rose-950/80 border border-rose-500 rounded-xl text-rose-200 text-xs shadow-lg">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span className="font-semibold text-rose-100">{replayError.message}</span>
+                  </div>
+                  <button
+                    onClick={() => setReplayError(null)}
+                    className="text-xs text-rose-400 hover:text-rose-200 underline shrink-0"
+                  >
+                    Dismiss
+                  </button>
                 </div>
-                <button
-                  onClick={() => setReplayError(null)}
-                  className="text-xs text-rose-400 hover:text-rose-200 underline"
-                >
-                  Dismiss
-                </button>
+
+                {(replayError.state_key || replayError.state_text) && (
+                  <details className="mt-2.5 text-[11px] text-rose-300/80">
+                    <summary className="cursor-pointer font-medium hover:text-rose-100 select-none">
+                      Show details (state key & text)
+                    </summary>
+                    <div className="mt-2 p-2.5 bg-slate-950/90 border border-rose-900/60 rounded font-mono text-[11px] space-y-1.5 break-all text-slate-300">
+                      {replayError.state_key && (
+                        <div>
+                          <span className="text-slate-400 font-semibold">State Key: </span>
+                          <span className="text-amber-300">{replayError.state_key}</span>
+                        </div>
+                      )}
+                      {replayError.state_text && (
+                        <div>
+                          <span className="text-slate-400 font-semibold">State Text: </span>
+                          <span className="text-slate-200 font-sans">"{replayError.state_text}"</span>
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                )}
               </div>
             )}
 
@@ -829,7 +871,7 @@ export const App: React.FC = () => {
                 interrupted: plState.interrupted,
                 responseDelayMs: plState.responseDelayMs,
               }}
-              streamError={replayError}
+              streamError={replayError?.message ?? null}
             />
           </div>
         )}

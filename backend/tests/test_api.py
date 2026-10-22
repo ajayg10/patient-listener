@@ -238,6 +238,9 @@ def test_replay_cache_miss_error_event(client: TestClient) -> None:
         assert err["engine"] == "patient_listener"
         assert err["error"] == "cache_miss"
         assert "Cache miss for state key" in err["message"]
+        assert err["checkpoint_ms"] == 250
+        assert "state_key" in err
+        assert "state_text" in err
 
 
 def test_replay_unknown_scenario_returns_404(client: TestClient) -> None:

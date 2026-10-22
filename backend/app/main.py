@@ -185,6 +185,9 @@ def build_dual_engine_timeline(
                 "engine": "patient_listener",
                 "error": "cache_miss",
                 "message": f"Cache miss for state key {k} at checkpoint {cp}ms. State text: '{st}'",
+                "checkpoint_ms": cp,
+                "state_key": k,
+                "state_text": st,
                 "t_ms": dispatch_t,
             }
             break
@@ -257,6 +260,9 @@ def build_dual_engine_timeline(
                     "engine": "patient_listener",
                     "error": "cache_miss",
                     "message": f"Cache miss for state key {k} at checkpoint {cp}ms after true end. State text: '{st}'",
+                    "checkpoint_ms": cp,
+                    "state_key": k,
+                    "state_text": st,
                     "t_ms": dispatch_t,
                 }
                 break

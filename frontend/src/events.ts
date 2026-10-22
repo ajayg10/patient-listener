@@ -241,6 +241,9 @@ export interface ReplayErrorEvent {
   engine?: string;
   error: string;
   message: string;
+  checkpoint_ms?: number;
+  state_key?: string;
+  state_text?: string;
   t_ms?: number;
 }
 
