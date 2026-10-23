@@ -1,0 +1,273 @@
+{
+  "provenance": "REAL-DECIDER (Tesla T4)",
+  "fixed_timeout_sweep": [
+    {
+      "param": 300,
+      "premature_rate": 0.4778,
+      "delay_p50_ms": 300.0,
+      "delay_p95_ms": 300.0
+    },
+    {
+      "param": 400,
+      "premature_rate": 0.3972,
+      "delay_p50_ms": 400.0,
+      "delay_p95_ms": 400.0
+    },
+    {
+      "param": 500,
+      "premature_rate": 0.3639,
+      "delay_p50_ms": 500.0,
+      "delay_p95_ms": 500.0
+    },
+    {
+      "param": 600,
+      "premature_rate": 0.3417,
+      "delay_p50_ms": 600.0,
+      "delay_p95_ms": 600.0
+    },
+    {
+      "param": 700,
+      "premature_rate": 0.2833,
+      "delay_p50_ms": 700.0,
+      "delay_p95_ms": 700.0
+    },
+    {
+      "param": 800,
+      "premature_rate": 0.1889,
+      "delay_p50_ms": 800.0,
+      "delay_p95_ms": 800.0
+    },
+    {
+      "param": 1000,
+      "premature_rate": 0.025,
+      "delay_p50_ms": 1000.0,
+      "delay_p95_ms": 1000.0
+    },
+    {
+      "param": 1200,
+      "premature_rate": 0.0,
+      "delay_p50_ms": 1010.0,
+      "delay_p95_ms": 1200.0
+    },
+    {
+      "param": 1500,
+      "premature_rate": 0.0,
+      "delay_p50_ms": 1010.0,
+      "delay_p95_ms": 1500.0
+    },
+    {
+      "param": 1800,
+      "premature_rate": 0.0,
+      "delay_p50_ms": 1010.0,
+      "delay_p95_ms": 1703.0
+    },
+    {
+      "param": 2000,
+      "premature_rate": 0.0,
+      "delay_p50_ms": 1010.0,
+      "delay_p95_ms": 1703.0
+    }
+  ],
+  "text_heuristic_sweep": [
+    {
+      "param": 100,
+      "premature_rate": 0.2472,
+      "delay_p50_ms": 100.0,
+      "delay_p95_ms": 100.0
+    },
+    {
+      "param": 200,
+      "premature_rate": 0.2472,
+      "delay_p50_ms": 200.0,
+      "delay_p95_ms": 200.0
+    },
+    {
+      "param": 250,
+      "premature_rate": 0.2472,
+      "delay_p50_ms": 250.0,
+      "delay_p95_ms": 250.0
+    },
+    {
+      "param": 350,
+      "premature_rate": 0.2306,
+      "delay_p50_ms": 350.0,
+      "delay_p95_ms": 350.0
+    },
+    {
+      "param": 500,
+      "premature_rate": 0.1972,
+      "delay_p50_ms": 500.0,
+      "delay_p95_ms": 500.0
+    },
+    {
+      "param": 700,
+      "premature_rate": 0.1556,
+      "delay_p50_ms": 700.0,
+      "delay_p95_ms": 700.0
+    },
+    {
+      "param": 900,
+      "premature_rate": 0.0528,
+      "delay_p50_ms": 900.0,
+      "delay_p95_ms": 900.0
+    },
+    {
+      "param": 1200,
+      "premature_rate": 0.0,
+      "delay_p50_ms": 1010.0,
+      "delay_p95_ms": 1200.0
+    }
+  ],
+  "decider_hi_sweeps": {
+    "0ms_oracle": [
+      {
+        "param_hi": 0.55,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.6,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.65,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.7,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.75,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.8,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.85,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.9,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    ],
+    "gpu_301ms_T4": [
+      {
+        "param_hi": 0.55,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.6,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.65,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.7,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.75,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.8,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.85,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.9,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    ],
+    "cpu_3190ms": [
+      {
+        "param_hi": 0.55,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.6,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.65,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.7,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.75,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.8,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.85,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      {
+        "param_hi": 0.9,
+        "premature_rate": 0.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    ]
+  }
+}

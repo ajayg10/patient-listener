@@ -1,0 +1,2377 @@
+{
+  "status": "SYNTHETIC_EVALUATION_COMPLETE",
+  "provenance": {
+    "decider_backend": "cuda (Tesla T4)",
+    "cache_keys_total": 8450,
+    "is_mock": false,
+    "headline_gpu_median_ms": 301.2,
+    "server_side_compute_ms": 2545140.0,
+    "mock_notice": "Decider decisions evaluated from real GPU Tesla T4 cache.",
+    "replay_cache_hits": 10384,
+    "replay_cache_misses": 0
+  },
+  "sample_counts": {
+    "total_test_turns": 360,
+    "test_users_count": 30,
+    "turns_per_user": 12,
+    "finished_turns": 181,
+    "incomplete_turns": 179,
+    "fast_pauser_turns": 120,
+    "slow_pauser_turns": 120,
+    "filler_heavy_turns": 120,
+    "complete_category_turns": 90,
+    "incomplete_category_turns": 90,
+    "ambiguous_category_turns": 180
+  },
+  "dataset_reconciliation": {
+    "dev": {
+      "turns": 180,
+      "users": 15,
+      "unique_utterances": 24,
+      "lookups": 644,
+      "unique_states": 102,
+      "hits": 644,
+      "misses": 0
+    },
+    "test": {
+      "turns": 360,
+      "users": 30,
+      "unique_utterances": 36,
+      "lookups": 1282,
+      "unique_states": 154,
+      "hits": 1282,
+      "misses": 0
+    },
+    "total": {
+      "turns": 540,
+      "users": 45,
+      "unique_utterances": 60,
+      "lookups": 1926,
+      "unique_states": 256,
+      "hits": 1926,
+      "misses": 0
+    }
+  },
+  "calibration": {
+    "grid_size": 64,
+    "dev_chosen_hi": 0.55,
+    "dev_chosen_lo": 0.1,
+    "dev_metrics": {
+      "accuracy": 1.0,
+      "premature_rate": 0.0,
+      "score": 1.0
+    }
+  },
+  "reliability": {
+    "dev_brier_score": 0.3476,
+    "test_brier_score": 0.3452,
+    "dev_sample_count": 644,
+    "test_sample_count": 1282
+  },
+  "pareto_summary": {
+    "fixed_timeouts_evaluated": 11,
+    "heuristic_thresholds_evaluated": 8,
+    "decider_hi_candidates_evaluated": 8
+  },
+  "definitions": {
+    "premature_interruption": "Action RESPOND executed while speaker is mid-thought. Numerator = premature count, Denominator = total turns (N=324).",
+    "unnecessary_wait": "Action RESPOND executed > 800ms after speech ended for finished turns. Numerator = delayed finished turns, Denominator = finished turns (N=155). Global 800ms threshold.",
+    "response_delay": "Elapsed ms from true speech end to agent response, evaluated exclusively over completed turns (N=155).",
+    "accuracy": "Turn-level match between predicted binary action and ground truth over all turns (N=324).",
+    "cluster_bootstrap": "Non-parametric two-stage cluster bootstrap (B=1000 resamples: sample users with replacement, then sample turns within user with replacement)."
+  },
+  "main_results": [
+    {
+      "name": "Fixed 600ms Baseline",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 123,
+      "unnecessary_wait_count": 9,
+      "accuracy": 0.6333,
+      "accuracy_ci": [
+        0.5824,
+        0.6815
+      ],
+      "accuracy_cluster_ci": [
+        0.5472,
+        0.7222
+      ],
+      "premature_interruption_rate": 0.3417,
+      "premature_interruption_ci": [
+        0.2946,
+        0.3921
+      ],
+      "premature_interruption_cluster_ci": [
+        0.2417,
+        0.4417
+      ],
+      "unnecessary_wait_rate": 0.0497,
+      "unnecessary_wait_ci": [
+        0.0264,
+        0.0918
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.0106,
+        0.0989
+      ],
+      "response_delay_p50_ms": 600.0,
+      "response_delay_p50_ci": [
+        600.0,
+        600.0
+      ],
+      "response_delay_p95_ms": 600.0,
+      "response_delay_p95_ci": [
+        600.0,
+        600.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Fixed 800ms Baseline",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 68,
+      "unnecessary_wait_count": 60,
+      "accuracy": 0.6444,
+      "accuracy_ci": [
+        0.5937,
+        0.6921
+      ],
+      "accuracy_cluster_ci": [
+        0.5667,
+        0.7222
+      ],
+      "premature_interruption_rate": 0.1889,
+      "premature_interruption_ci": [
+        0.1518,
+        0.2325
+      ],
+      "premature_interruption_cluster_ci": [
+        0.1194,
+        0.264
+      ],
+      "unnecessary_wait_rate": 0.3315,
+      "unnecessary_wait_ci": [
+        0.267,
+        0.4029
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.1714,
+        0.4945
+      ],
+      "response_delay_p50_ms": 800.0,
+      "response_delay_p50_ci": [
+        800.0,
+        800.0
+      ],
+      "response_delay_p95_ms": 800.0,
+      "response_delay_p95_ci": [
+        800.0,
+        800.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Fixed 1200ms Baseline",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 181,
+      "accuracy": 0.7056,
+      "accuracy_ci": [
+        0.6565,
+        0.7503
+      ],
+      "accuracy_cluster_ci": [
+        0.6,
+        0.8
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 1.0,
+      "unnecessary_wait_ci": [
+        0.9792,
+        1.0
+      ],
+      "unnecessary_wait_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "response_delay_p50_ms": 1010.0,
+      "response_delay_p50_ci": [
+        910.0,
+        1196.0
+      ],
+      "response_delay_p95_ms": 1200.0,
+      "response_delay_p95_ci": [
+        1200.0,
+        1200.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Text Heuristic Baseline (250ms, dev-tuned)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 89,
+      "unnecessary_wait_count": 0,
+      "accuracy": 0.7528,
+      "accuracy_ci": [
+        0.7057,
+        0.7945
+      ],
+      "accuracy_cluster_ci": [
+        0.6972,
+        0.8056
+      ],
+      "premature_interruption_rate": 0.2472,
+      "premature_interruption_ci": [
+        0.2055,
+        0.2943
+      ],
+      "premature_interruption_cluster_ci": [
+        0.1944,
+        0.3028
+      ],
+      "unnecessary_wait_rate": 0.0,
+      "unnecessary_wait_ci": [
+        0.0,
+        0.0208
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "response_delay_p50_ms": 250.0,
+      "response_delay_p50_ci": [
+        250.0,
+        250.0
+      ],
+      "response_delay_p95_ms": 250.0,
+      "response_delay_p95_ci": [
+        250.0,
+        250.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Per-User Text Heuristic (Profile Threshold, No Model)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 46,
+      "unnecessary_wait_count": 59,
+      "accuracy": 0.8694,
+      "accuracy_ci": [
+        0.8307,
+        0.9004
+      ],
+      "accuracy_cluster_ci": [
+        0.8222,
+        0.9111
+      ],
+      "premature_interruption_rate": 0.1278,
+      "premature_interruption_ci": [
+        0.0972,
+        0.1662
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0833,
+        0.1778
+      ],
+      "unnecessary_wait_rate": 0.326,
+      "unnecessary_wait_ci": [
+        0.2619,
+        0.3973
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.1639,
+        0.4973
+      ],
+      "response_delay_p50_ms": 707.0,
+      "response_delay_p50_ci": [
+        661.0,
+        766.0
+      ],
+      "response_delay_p95_ms": 928.0,
+      "response_delay_p95_ci": [
+        924.0,
+        972.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Strands Decider 2B (301ms GPU, cache-measured on T4)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 171,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 0.9448,
+      "unnecessary_wait_ci": [
+        0.9013,
+        0.9697
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.8989,
+        0.9831
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 301.2,
+      "decision_latency_p95_ms": 301.2,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Strands Decider 2B + Profile (301ms GPU, cache-measured on T4)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 181,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 1.0,
+      "unnecessary_wait_ci": [
+        0.9792,
+        1.0
+      ],
+      "unnecessary_wait_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 301.2,
+      "decision_latency_p95_ms": 301.2,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Strands Decider 2B + Calibrated Policy [REAL-CALIBRATED] (hi=0.55, lo=0.10, 301ms GPU, cache-measured on T4)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 181,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 1.0,
+      "unnecessary_wait_ci": [
+        0.9792,
+        1.0
+      ],
+      "unnecessary_wait_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 301.2,
+      "decision_latency_p95_ms": 301.2,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Strands Decider 2B (235.6ms GPU benchmark, synthetic 20-150 tokens on T4)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 171,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 0.9448,
+      "unnecessary_wait_ci": [
+        0.9013,
+        0.9697
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.8989,
+        0.9831
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 235.6,
+      "decision_latency_p95_ms": 235.6,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Strands Decider 2B (0 ms decision latency)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 171,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 0.9448,
+      "unnecessary_wait_ci": [
+        0.9013,
+        0.9697
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.8989,
+        0.9831
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Strands Decider 2B (3190ms CPU, Ryzen 5 5500U)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 181,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 1.0,
+      "unnecessary_wait_ci": [
+        0.9792,
+        1.0
+      ],
+      "unnecessary_wait_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 3190.1,
+      "decision_latency_p95_ms": 3190.1,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Decider Sweep (100ms Sweep)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 171,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 0.9448,
+      "unnecessary_wait_ci": [
+        0.9013,
+        0.9697
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.8989,
+        0.9831
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 100.0,
+      "decision_latency_p95_ms": 100.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Decider Sweep (300ms Sweep)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 171,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 0.9448,
+      "unnecessary_wait_ci": [
+        0.9013,
+        0.9697
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.8989,
+        0.9831
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 300.0,
+      "decision_latency_p95_ms": 300.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Decider Sweep (1000ms Sweep)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 181,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 1.0,
+      "unnecessary_wait_ci": [
+        0.9792,
+        1.0
+      ],
+      "unnecessary_wait_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 1000.0,
+      "decision_latency_p95_ms": 1000.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "Decider Sweep (3000ms Sweep)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 181,
+      "accuracy": 1.0,
+      "accuracy_ci": [
+        0.9894,
+        1.0
+      ],
+      "accuracy_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 1.0,
+      "unnecessary_wait_ci": [
+        0.9792,
+        1.0
+      ],
+      "unnecessary_wait_cluster_ci": [
+        1.0,
+        1.0
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        2200.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 3000.0,
+      "decision_latency_p95_ms": 3000.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "PERSONA-BLIND REFERENCE (single first-checkpoint, not a ceiling)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 0,
+      "unnecessary_wait_count": 91,
+      "accuracy": 0.7472,
+      "accuracy_ci": [
+        0.6999,
+        0.7893
+      ],
+      "accuracy_cluster_ci": [
+        0.6889,
+        0.8
+      ],
+      "premature_interruption_rate": 0.0,
+      "premature_interruption_ci": [
+        0.0,
+        0.0106
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0,
+        0.0
+      ],
+      "unnecessary_wait_rate": 0.5028,
+      "unnecessary_wait_ci": [
+        0.4306,
+        0.5748
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.426,
+        0.5746
+      ],
+      "response_delay_p50_ms": 2200.0,
+      "response_delay_p50_ci": [
+        250.0,
+        2200.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "ARCHETYPE-AWARE REFERENCE (single first-checkpoint, not a ceiling)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 18,
+      "unnecessary_wait_count": 49,
+      "accuracy": 0.8139,
+      "accuracy_ci": [
+        0.7704,
+        0.8507
+      ],
+      "accuracy_cluster_ci": [
+        0.7639,
+        0.8583
+      ],
+      "premature_interruption_rate": 0.05,
+      "premature_interruption_ci": [
+        0.0319,
+        0.0776
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0194,
+        0.0917
+      ],
+      "unnecessary_wait_rate": 0.2707,
+      "unnecessary_wait_ci": [
+        0.2113,
+        0.3397
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.1703,
+        0.3793
+      ],
+      "response_delay_p50_ms": 250.0,
+      "response_delay_p50_ci": [
+        250.0,
+        250.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "USER-AWARE REFERENCE (single first-checkpoint, not a ceiling)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 14,
+      "unnecessary_wait_count": 51,
+      "accuracy": 0.8194,
+      "accuracy_ci": [
+        0.7764,
+        0.8557
+      ],
+      "accuracy_cluster_ci": [
+        0.7694,
+        0.8667
+      ],
+      "premature_interruption_rate": 0.0389,
+      "premature_interruption_ci": [
+        0.0233,
+        0.0642
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0139,
+        0.0695
+      ],
+      "unnecessary_wait_rate": 0.2818,
+      "unnecessary_wait_ci": [
+        0.2213,
+        0.3513
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.1789,
+        0.3896
+      ],
+      "response_delay_p50_ms": 250.0,
+      "response_delay_p50_ci": [
+        250.0,
+        250.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    },
+    {
+      "name": "ORACLE-UPPER-BOUND REFERENCE (single first-checkpoint, not a ceiling)",
+      "total_turns": 360,
+      "finished_turns": 181,
+      "incomplete_turns": 179,
+      "premature_count": 18,
+      "unnecessary_wait_count": 49,
+      "accuracy": 0.8139,
+      "accuracy_ci": [
+        0.7704,
+        0.8507
+      ],
+      "accuracy_cluster_ci": [
+        0.7639,
+        0.8583
+      ],
+      "premature_interruption_rate": 0.05,
+      "premature_interruption_ci": [
+        0.0319,
+        0.0776
+      ],
+      "premature_interruption_cluster_ci": [
+        0.0194,
+        0.0917
+      ],
+      "unnecessary_wait_rate": 0.2707,
+      "unnecessary_wait_ci": [
+        0.2113,
+        0.3397
+      ],
+      "unnecessary_wait_cluster_ci": [
+        0.1703,
+        0.3793
+      ],
+      "response_delay_p50_ms": 250.0,
+      "response_delay_p50_ci": [
+        250.0,
+        250.0
+      ],
+      "response_delay_p95_ms": 2200.0,
+      "response_delay_p95_ci": [
+        2200.0,
+        2200.0
+      ],
+      "decision_latency_p50_ms": 0.0,
+      "decision_latency_p95_ms": 0.0,
+      "inference_cost_usd": 0.0
+    }
+  ],
+  "per_persona_breakdown": {
+    "Fixed 600ms Baseline": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 0.925,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.125,
+        "delay_p50_ms": 600.0,
+        "delay_p95_ms": 600.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 0.4917,
+        "premature_rate": 0.5083,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 600.0,
+        "delay_p95_ms": 600.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 0.4833,
+        "premature_rate": 0.5167,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 600.0,
+        "delay_p95_ms": 600.0
+      }
+    },
+    "Fixed 800ms Baseline": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 0.5,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.8333,
+        "delay_p50_ms": 695.0,
+        "delay_p95_ms": 800.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 0.6583,
+        "premature_rate": 0.3417,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 800.0,
+        "delay_p95_ms": 800.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 0.775,
+        "premature_rate": 0.225,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 800.0,
+        "delay_p95_ms": 800.0
+      }
+    },
+    "Fixed 1200ms Baseline": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 0.4,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 695.0,
+        "delay_p95_ms": 839.5
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 1200.0,
+        "delay_p95_ms": 1200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 0.7167,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 1098.0,
+        "delay_p95_ms": 1200.0
+      }
+    },
+    "Text Heuristic Baseline (250ms, dev-tuned)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 0.85,
+        "premature_rate": 0.15,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 0.7417,
+        "premature_rate": 0.2583,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 0.6667,
+        "premature_rate": 0.3333,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      }
+    },
+    "Per-User Text Heuristic (Profile Threshold, No Model)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 0.9167,
+        "premature_rate": 0.0833,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 343.0,
+        "delay_p95_ms": 439.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 0.875,
+        "premature_rate": 0.125,
+        "unnecessary_wait_rate": 0.8983,
+        "delay_p50_ms": 884.0,
+        "delay_p95_ms": 972.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 0.8167,
+        "premature_rate": 0.175,
+        "unnecessary_wait_rate": 0.12,
+        "delay_p50_ms": 716.0,
+        "delay_p95_ms": 829.0
+      }
+    },
+    "Strands Decider 2B (301ms GPU, cache-measured on T4)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.9306,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.9492,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.96,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B + Profile (301ms GPU, cache-measured on T4)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B + Calibrated Policy [REAL-CALIBRATED] (hi=0.55, lo=0.10, 301ms GPU, cache-measured on T4)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B (235.6ms GPU benchmark, synthetic 20-150 tokens on T4)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.9306,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.9492,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.96,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B (0 ms decision latency)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.9306,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.9492,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.96,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B (3190ms CPU, Ryzen 5 5500U)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "PERSONA-BLIND REFERENCE (single first-checkpoint, not a ceiling)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 0.65,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.5833,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 0.7583,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.4915,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 0.8333,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.4,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "ARCHETYPE-AWARE REFERENCE (single first-checkpoint, not a ceiling)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 0.85,
+        "premature_rate": 0.15,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 0.7583,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.4915,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 0.8333,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.4,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "USER-AWARE REFERENCE (single first-checkpoint, not a ceiling)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 0.8333,
+        "premature_rate": 0.0833,
+        "unnecessary_wait_rate": 0.1389,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 2200.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 0.7917,
+        "premature_rate": 0.0333,
+        "unnecessary_wait_rate": 0.3559,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 0.8333,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.4,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "ORACLE-UPPER-BOUND REFERENCE (single first-checkpoint, not a ceiling)": {
+      "fast_pauser": {
+        "count": 120,
+        "accuracy": 0.85,
+        "premature_rate": 0.15,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      },
+      "slow_pauser": {
+        "count": 120,
+        "accuracy": 0.7583,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.4915,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 2200.0
+      },
+      "filler_heavy": {
+        "count": 120,
+        "accuracy": 0.8333,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.4,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 2200.0
+      }
+    }
+  },
+  "per_category_breakdown": {
+    "Fixed 600ms Baseline": {
+      "complete": {
+        "count": 90,
+        "accuracy": 0.9778,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0222,
+        "delay_p50_ms": 600.0,
+        "delay_p95_ms": 600.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 0.3778,
+        "premature_rate": 0.6222,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 0.5889,
+        "premature_rate": 0.3722,
+        "unnecessary_wait_rate": 0.0769,
+        "delay_p50_ms": 600.0,
+        "delay_p95_ms": 600.0
+      }
+    },
+    "Fixed 800ms Baseline": {
+      "complete": {
+        "count": 90,
+        "accuracy": 0.7333,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.2667,
+        "delay_p50_ms": 800.0,
+        "delay_p95_ms": 800.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 0.6889,
+        "premature_rate": 0.3111,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 0.5778,
+        "premature_rate": 0.2222,
+        "unnecessary_wait_rate": 0.3956,
+        "delay_p50_ms": 800.0,
+        "delay_p95_ms": 800.0
+      }
+    },
+    "Fixed 1200ms Baseline": {
+      "complete": {
+        "count": 90,
+        "accuracy": 0.4333,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 1078.5,
+        "delay_p95_ms": 1200.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 0.6944,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 924.0,
+        "delay_p95_ms": 1200.0
+      }
+    },
+    "Text Heuristic Baseline (250ms, dev-tuned)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 0.5056,
+        "premature_rate": 0.4944,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      }
+    },
+    "Per-User Text Heuristic (Profile Threshold, No Model)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.3333,
+        "delay_p50_ms": 738.0,
+        "delay_p95_ms": 928.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 0.7389,
+        "premature_rate": 0.2556,
+        "unnecessary_wait_rate": 0.3187,
+        "delay_p50_ms": 669.0,
+        "delay_p95_ms": 926.5
+      }
+    },
+    "Strands Decider 2B (301ms GPU, cache-measured on T4)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.8889,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B + Profile (301ms GPU, cache-measured on T4)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B + Calibrated Policy [REAL-CALIBRATED] (hi=0.55, lo=0.10, 301ms GPU, cache-measured on T4)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B (235.6ms GPU benchmark, synthetic 20-150 tokens on T4)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.8889,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B (0 ms decision latency)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.8889,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "Strands Decider 2B (3190ms CPU, Ryzen 5 5500U)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "PERSONA-BLIND REFERENCE (single first-checkpoint, not a ceiling)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 0.4944,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 1.0,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "ARCHETYPE-AWARE REFERENCE (single first-checkpoint, not a ceiling)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 0.6278,
+        "premature_rate": 0.1,
+        "unnecessary_wait_rate": 0.5385,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "USER-AWARE REFERENCE (single first-checkpoint, not a ceiling)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 0.6389,
+        "premature_rate": 0.0778,
+        "unnecessary_wait_rate": 0.5604,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    },
+    "ORACLE-UPPER-BOUND REFERENCE (single first-checkpoint, not a ceiling)": {
+      "complete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 250.0,
+        "delay_p95_ms": 250.0
+      },
+      "incomplete": {
+        "count": 90,
+        "accuracy": 1.0,
+        "premature_rate": 0.0,
+        "unnecessary_wait_rate": 0.0,
+        "delay_p50_ms": 0.0,
+        "delay_p95_ms": 0.0
+      },
+      "ambiguous": {
+        "count": 180,
+        "accuracy": 0.6278,
+        "premature_rate": 0.1,
+        "unnecessary_wait_rate": 0.5385,
+        "delay_p50_ms": 2200.0,
+        "delay_p95_ms": 2200.0
+      }
+    }
+  },
+  "bedrock_llm_judge": "SKIPPED",
+  "gpu_benchmark": {
+    "device": "cuda",
+    "gpu_name": "Tesla T4",
+    "warnings": "causal_conv1d and flash-linear-attention missing (reference path)",
+    "one_question": {
+      "20_tokens_ms": {
+        "median": 167.5,
+        "p95": 176.0
+      },
+      "60_tokens_ms": {
+        "median": 235.6,
+        "p95": 236.7
+      },
+      "150_tokens_ms": {
+        "median": 237.3,
+        "p95": 238.5
+      }
+    },
+    "two_questions": {
+      "20_tokens_ms": {
+        "median": 343.1,
+        "p95": 343.7
+      },
+      "60_tokens_ms": {
+        "median": 395.2,
+        "p95": 400.3
+      },
+      "150_tokens_ms": {
+        "median": 395.8,
+        "p95": 401.1
+      }
+    }
+  },
+  "paired_differences": {
+    "decider_vs_heuristic": {
+      "observed_diff": 0.2472,
+      "ci_low": 0.1889,
+      "ci_high": 0.3028
+    },
+    "profile_vs_decider": {
+      "observed_diff": 0.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    "profile_vs_control": {
+      "observed_diff": 0.1306,
+      "ci_low": 0.0861,
+      "ci_high": 0.1833
+    }
+  },
+  "reference_rows_paired_differences": {
+    "archetype_vs_blind": {
+      "observed_diff": 0.0667,
+      "ci_low": 0.0111,
+      "ci_high": 0.1306
+    },
+    "user_vs_archetype": {
+      "observed_diff": 0.0056,
+      "ci_low": -0.0278,
+      "ci_high": 0.0417
+    },
+    "user_vs_blind": {
+      "observed_diff": 0.0722,
+      "ci_low": 0.0194,
+      "ci_high": 0.1389
+    }
+  },
+  "reference_ceilings_paired_differences": {
+    "archetype_vs_blind": {
+      "observed_diff": 0.0667,
+      "ci_low": 0.0111,
+      "ci_high": 0.1306
+    },
+    "user_vs_archetype": {
+      "observed_diff": 0.0056,
+      "ci_low": -0.0278,
+      "ci_high": 0.0417
+    },
+    "user_vs_blind": {
+      "observed_diff": 0.0722,
+      "ci_low": 0.0194,
+      "ci_high": 0.1389
+    }
+  },
+  "q1_q2_conflict_rule": {
+    "total_evaluated_checkpoints": 1800,
+    "conflict_checkpoints": 0,
+    "threshold_hi": 0.55,
+    "effect_note": "No evaluated pause states triggered conflicting Q1/Q2 predictions."
+  },
+  "findings": {
+    "decider_name": "Strands Decider 2B (301ms GPU, cache-measured on T4)",
+    "decider_premature_rate": 0.0,
+    "decider_delay_p50": 2200.0,
+    "decider_delay_p95": 2200.0,
+    "heuristic_premature_rate": 0.24722222222222223,
+    "heuristic_delay_p50": 250.0,
+    "heuristic_delay_p95": 250.0,
+    "control_premature_rate": 0.12777777777777777,
+    "control_delay_p50": 707.0,
+    "control_delay_p95": 928.0,
+    "profile_premature_rate": 0.0,
+    "profile_delay_p50": 2200.0,
+    "profile_delay_p95": 2200.0,
+    "paired_dec_heur": 0.2472,
+    "paired_prof_dec": 0.0,
+    "paired_prof_ctrl": 0.1306,
+    "q1_q2_conflict_checkpoints": 0,
+    "q1_q2_total_checkpoints": 1800
+  },
+  "operating_points": {
+    "delay_budget_p50_ms": 800.0,
+    "premature_budget_rate": 0.05,
+    "point_a": {
+      "Fixed Timeout": {
+        "family": "Fixed Timeout",
+        "param": 800,
+        "premature_rate": 0.1889,
+        "premature_cluster_ci": [
+          0.1194,
+          0.264
+        ],
+        "delay_p50_ms": 800.0,
+        "delay_p50_ci": [
+          800.0,
+          800.0
+        ],
+        "delay_p95_ms": 800.0,
+        "condition": "Fixed timeout (800ms)"
+      },
+      "Text Heuristic": {
+        "family": "Text Heuristic",
+        "param": 800,
+        "premature_rate": 0.1111,
+        "premature_cluster_ci": [
+          0.0639,
+          0.1667
+        ],
+        "delay_p50_ms": 800.0,
+        "delay_p50_ci": [
+          800.0,
+          800.0
+        ],
+        "delay_p95_ms": 800.0,
+        "condition": "dev-tuned (800ms)"
+      },
+      "Per-User Control": {
+        "family": "Per-User Control",
+        "param": 1.15,
+        "premature_rate": 0.0417,
+        "premature_cluster_ci": [
+          0.0139,
+          0.0778
+        ],
+        "delay_p50_ms": 808.0,
+        "delay_p50_ci": [
+          760.15,
+          874.0
+        ],
+        "delay_p95_ms": 1067.2,
+        "condition": "profile threshold x1.15 (no model)"
+      },
+      "Decider": {
+        "family": "Decider",
+        "param": 0.3,
+        "premature_rate": 0.1,
+        "premature_cluster_ci": [
+          0.0583,
+          0.1472
+        ],
+        "delay_p50_ms": 1501.2,
+        "delay_p50_ci": [
+          551.2,
+          2200.0
+        ],
+        "delay_p95_ms": 2200.0,
+        "condition": "GPU cache (hi=0.3, lo=0.30)"
+      },
+      "Decider + Profile": {
+        "family": "Decider + Profile",
+        "param": 0.3,
+        "premature_rate": 0.0806,
+        "premature_cluster_ci": [
+          0.0417,
+          0.1223
+        ],
+        "delay_p50_ms": 551.2,
+        "delay_p50_ci": [
+          551.2,
+          1501.2
+        ],
+        "delay_p95_ms": 2200.0,
+        "condition": "GPU cache + profile (hi=0.3, lo=0.30)"
+      }
+    },
+    "point_b": {
+      "Fixed Timeout": {
+        "family": "Fixed Timeout",
+        "param": 950,
+        "premature_rate": 0.0333,
+        "premature_cluster_ci": [
+          0.0111,
+          0.0639
+        ],
+        "delay_p50_ms": 950.0,
+        "delay_p50_ci": [
+          910.0,
+          950.0
+        ],
+        "delay_p95_ms": 950.0,
+        "condition": "Fixed timeout (950ms)"
+      },
+      "Text Heuristic": {
+        "family": "Text Heuristic",
+        "param": 950,
+        "premature_rate": 0.025,
+        "premature_cluster_ci": [
+          0.0056,
+          0.0528
+        ],
+        "delay_p50_ms": 950.0,
+        "delay_p50_ci": [
+          910.0,
+          950.0
+        ],
+        "delay_p95_ms": 950.0,
+        "condition": "dev-tuned (950ms)"
+      },
+      "Per-User Control": {
+        "family": "Per-User Control",
+        "param": 1.1,
+        "premature_rate": 0.075,
+        "premature_cluster_ci": [
+          0.0361,
+          0.1194
+        ],
+        "delay_p50_ms": 777.7,
+        "delay_p50_ci": [
+          727.1,
+          836.0
+        ],
+        "delay_p95_ms": 1020.8,
+        "condition": "profile threshold x1.1 (no model)"
+      },
+      "Decider": {
+        "family": "Decider",
+        "param": 0.55,
+        "premature_rate": 0.0,
+        "premature_cluster_ci": [
+          0.0,
+          0.0
+        ],
+        "delay_p50_ms": 2200.0,
+        "delay_p50_ci": [
+          2200.0,
+          2200.0
+        ],
+        "delay_p95_ms": 2200.0,
+        "condition": "GPU cache (hi=0.55, lo=0.30)"
+      },
+      "Decider + Profile": {
+        "family": "Decider + Profile",
+        "param": 0.5,
+        "premature_rate": 0.0,
+        "premature_cluster_ci": [
+          0.0,
+          0.0
+        ],
+        "delay_p50_ms": 2200.0,
+        "delay_p50_ci": [
+          2200.0,
+          2200.0
+        ],
+        "delay_p95_ms": 2200.0,
+        "condition": "GPU cache + profile (hi=0.5, lo=0.30)"
+      }
+    },
+    "paired_differences_point_a": {
+      "decider_minus_fixed": {
+        "comparison": "Decider minus Fixed Timeout",
+        "observed_diff": -0.0889,
+        "ci_low": -0.1556,
+        "ci_high": -0.0305
+      },
+      "decider_minus_heuristic": {
+        "comparison": "Decider minus Text Heuristic",
+        "observed_diff": -0.0111,
+        "ci_low": -0.0556,
+        "ci_high": 0.0333
+      },
+      "profile_minus_decider": {
+        "comparison": "Decider+Profile minus Decider",
+        "observed_diff": -0.0194,
+        "ci_low": -0.0583,
+        "ci_high": 0.0111
+      },
+      "profile_minus_control": {
+        "comparison": "Decider+Profile minus Per-User Control",
+        "observed_diff": 0.0389,
+        "ci_low": -0.0111,
+        "ci_high": 0.0862
+      }
+    },
+    "paired_differences_point_b": {
+      "decider_minus_fixed": {
+        "comparison": "Decider minus Fixed Timeout",
+        "observed_diff": 1353.2,
+        "ci_low": 1304.6,
+        "ci_high": 1399.0
+      },
+      "decider_minus_heuristic": {
+        "comparison": "Decider minus Text Heuristic",
+        "observed_diff": 1353.2,
+        "ci_low": 1304.6,
+        "ci_high": 1399.0
+      },
+      "profile_minus_decider": {
+        "comparison": "Decider+Profile minus Decider",
+        "observed_diff": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "profile_minus_control": {
+        "comparison": "Decider+Profile minus Per-User Control",
+        "observed_diff": 1508.3,
+        "ci_low": 1403.8,
+        "ci_high": 1604.5
+      }
+    },
+    "dominance_finding": "Fixed timeouts and text heuristic dominate Decider at both operating points: At Point A (equal delay budget <= 800ms), Text Heuristic achieves 800ms delay vs Decider 1501ms with comparable cut-in rate. At Point B (premature budget <= 5%), Fixed 950ms and Text Heuristic 950ms achieve 950ms delay with 3.3% and 2.5% cut-ins, whereas Decider waited 2200ms (+1250ms slower) to eliminate cut-ins."
+  },
+  "b0_validation_subset": {
+    "num_cases": 40,
+    "fixed_800ms_accuracy": 0.4,
+    "fixed_800ms_correct": 16,
+    "mock_decider_accuracy": 0.75,
+    "mock_decider_correct": 30,
+    "real_model_accuracy": 0.85,
+    "real_model_correct": 34,
+    "real_model_backend": "local_cpu (AMD Ryzen 5 5500U, b0_spike.py)",
+    "mock_decider_backend": "mock (MockDecider)"
+  },
+  "rendered_table_numbers": [
+    "0",
+    "0.0",
+    "0.10",
+    "0.3",
+    "0.30",
+    "0.5",
+    "0.50",
+    "0.55",
+    "0.6",
+    "1",
+    "1.1",
+    "1.10",
+    "1.15",
+    "1.4",
+    "1.9",
+    "2",
+    "2.1",
+    "2.3",
+    "2.5",
+    "2.6",
+    "2.8",
+    "3.0",
+    "3.2",
+    "3.3",
+    "3.6",
+    "3.9",
+    "4.2",
+    "5",
+    "5.0",
+    "5.3",
+    "5.6",
+    "5.8",
+    "6.4",
+    "6.7",
+    "7.0",
+    "7.2",
+    "7.5",
+    "7.8",
+    "8.1",
+    "8.3",
+    "8.6",
+    "8.9",
+    "9.2",
+    "9.7",
+    "9.9",
+    "10.0",
+    "11.1",
+    "11.9",
+    "12.2",
+    "12.5",
+    "12.8",
+    "13.1",
+    "13.9",
+    "14.7",
+    "15",
+    "15.0",
+    "15.2",
+    "15.6",
+    "16.4",
+    "16.6",
+    "16.7",
+    "17.0",
+    "17.1",
+    "17.5",
+    "17.8",
+    "17.9",
+    "18.9",
+    "19.4",
+    "20",
+    "20.5",
+    "21.1",
+    "22.1",
+    "22.2",
+    "22.5",
+    "23.2",
+    "24",
+    "24.2",
+    "24.7",
+    "25.6",
+    "25.8",
+    "26.2",
+    "26.4",
+    "26.7",
+    "27.1",
+    "28.2",
+    "29.4",
+    "29.5",
+    "30",
+    "30.3",
+    "31.1",
+    "32.6",
+    "33.1",
+    "33.3",
+    "34.0",
+    "34.2",
+    "35.1",
+    "36",
+    "37.2",
+    "37.9",
+    "39.0",
+    "39.2",
+    "39.7",
+    "40.3",
+    "42.6",
+    "43.1",
+    "43.3",
+    "44.2",
+    "45",
+    "49.4",
+    "49.5",
+    "49.7",
+    "50.3",
+    "50.6",
+    "50.8",
+    "51.7",
+    "54.7",
+    "56.7",
+    "57.5",
+    "57.8",
+    "58.2",
+    "58.9",
+    "59.4",
+    "60",
+    "60.0",
+    "62.2",
+    "62.8",
+    "63.3",
+    "63.9",
+    "64.4",
+    "65.6",
+    "68.2",
+    "68.9",
+    "69.2",
+    "69.4",
+    "69.7",
+    "70.0",
+    "70.6",
+    "72.2",
+    "73.3",
+    "73.9",
+    "74.7",
+    "75.0",
+    "75.3",
+    "76.4",
+    "76.9",
+    "77.0",
+    "77.6",
+    "78.9",
+    "79.5",
+    "80.0",
+    "80.6",
+    "81.4",
+    "81.9",
+    "82.2",
+    "83.1",
+    "85.1",
+    "85.6",
+    "85.8",
+    "86.7",
+    "86.9",
+    "89.9",
+    "90.0",
+    "90.1",
+    "91.1",
+    "94.5",
+    "95",
+    "97.0",
+    "97.8",
+    "97.9",
+    "98.3",
+    "98.9",
+    "100.0",
+    "102",
+    "150",
+    "154",
+    "158.5",
+    "159.6",
+    "167.5",
+    "175.6",
+    "176.0",
+    "180",
+    "235",
+    "235.6",
+    "236.7",
+    "237.3",
+    "238.5",
+    "250",
+    "250.0",
+    "256",
+    "343",
+    "343.1",
+    "343.7",
+    "360",
+    "395.2",
+    "395.8",
+    "400.3",
+    "401.1",
+    "540",
+    "551",
+    "551.2",
+    "600",
+    "600.0",
+    "644",
+    "661.0",
+    "695",
+    "707",
+    "716",
+    "727.1",
+    "738",
+    "760.1",
+    "766.0",
+    "778",
+    "800",
+    "800.0",
+    "808",
+    "836.0",
+    "874.0",
+    "884",
+    "910.0",
+    "928",
+    "950",
+    "950.0",
+    "1010",
+    "1021",
+    "1067",
+    "1078",
+    "1098",
+    "1196.0",
+    "1200",
+    "1282",
+    "1304.6",
+    "1353.2",
+    "1399.0",
+    "1403.8",
+    "1501",
+    "1501.2",
+    "1508.3",
+    "1604.5",
+    "1926",
+    "2200",
+    "2200.0"
+  ],
+  "stage_timings_s": {
+    "stage_1_load_cache_data": 0.06,
+    "stage_2_dev_calibration": 0.014,
+    "stage_3_replay_evaluation": 0.289,
+    "stage_4_bootstrap_cis": 0.207,
+    "stage_5_sweeps_reliability": 0.841,
+    "stage_5b_operating_points": 2.278,
+    "stage_6_report_writing": 0.001,
+    "total_seconds": 3.708
+  }
+}

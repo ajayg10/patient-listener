@@ -22,7 +22,10 @@ hf-cache/
 *.bin
 
 # Evaluation results and data artifacts
-backend/eval/results/
+backend/eval/results/*
+!backend/eval/results/*.json
+!backend/eval/results/*.png
+!backend/eval/results/results.md
 !backend/eval/results/.gitkeep
 backend/eval/data/decisions_cache_real.jsonl
 
