@@ -601,6 +601,43 @@ def compute_reconciled_counts(
     return results
 
 
+def _dominates(a: dict, b: dict) -> bool:
+    """a dominates b: no worse on premature rate and delay p50, strictly better on one."""
+    pa, pb = a["premature_rate"], b["premature_rate"]
+    da, db = a["delay_p50_ms"], b["delay_p50_ms"]
+    return pa <= pb and da <= db and (pa < pb or da < db)
+
+
+def describe_dominance(point_results: dict) -> str:
+    """Plain-language dominance statement computed from the operating point rows."""
+    decider_families = ("Decider", "Decider + Profile")
+    parts = []
+    for label, key in (("Point A (delay budget)", "A"), ("Point B (premature budget)", "B")):
+        rows = point_results[key]
+        claims = []
+        for d in decider_families:
+            if d not in rows:
+                continue
+            for other, row in rows.items():
+                if other in decider_families:
+                    continue
+                dr = rows[d]
+                if _dominates(dr, row):
+                    claims.append(
+                        f"{d} beats {other} on both axes ({dr['premature_rate'] * 100:.1f}% at "
+                        f"{dr['delay_p50_ms']:.0f} ms vs {row['premature_rate'] * 100:.1f}% at {row['delay_p50_ms']:.0f} ms)"
+                    )
+                elif _dominates(row, dr):
+                    claims.append(
+                        f"{other} beats {d} on both axes ({row['premature_rate'] * 100:.1f}% at "
+                        f"{row['delay_p50_ms']:.0f} ms vs {dr['premature_rate'] * 100:.1f}% at {dr['delay_p50_ms']:.0f} ms)"
+                    )
+        if not claims:
+            claims.append("no row dominates another on both axes; each trades cut-ins against delay")
+        parts.append(f"{label}, by point estimate: " + "; ".join(claims) + ".")
+    return " ".join(parts)
+
+
 def compute_operating_points_analysis(
     turns: list[dict[str, Any]],
     dev_turns: list[dict[str, Any]],
@@ -789,12 +826,7 @@ def compute_operating_points_analysis(
         "point_b": point_results["B"],
         "paired_differences_point_a": paired_a,
         "paired_differences_point_b": paired_b,
-        "dominance_finding": (
-            "Fixed timeouts and text heuristic dominate Decider at both operating points: "
-            "At Point A (equal delay budget <= 800ms), Text Heuristic achieves 800ms delay vs Decider 1501ms with comparable cut-in rate. "
-            "At Point B (premature budget <= 5%), Fixed 950ms and Text Heuristic 950ms achieve 950ms delay with 3.3% and 2.5% cut-ins, "
-            "whereas Decider waited 2200ms (+1250ms slower) to eliminate cut-ins."
-        ),
+        "dominance_finding": describe_dominance(point_results),
     }
 
 
@@ -1601,7 +1633,10 @@ def run_full_evaluation(
             f"- **Q1+Q2 Conflict Rule Effect**: Across {total_eval_checkpoints} evaluated pause checkpoints on the test split, exactly {conflict_checkpoints} checkpoints exhibited conflict (Q1 p(RESPOND) >= {calib_thresh.hi:.2f} and Q2 p(YES) >= 0.50).",
             "",
             "### E. Outcome & Summary Verdict",
-            "- **Plain Language Outcome**: Across both operating points (Point A equal delay budget and Point B equal premature budget), the Fixed Timeout and Text Heuristic baselines dominate the Strands Decider 2B. At Point A, Fixed Timeout achieves 800.0 ms delay P50, while Decider exhibits 1501.2 ms delay P50. At Point B, Fixed Timeout (950ms) achieves a 3.3% premature rate and 950.0 ms delay P50, whereas Decider exhibits 2200.0 ms delay P50 (+1353.2 ms slower). Decider does not beat the baselines at equal delay or equal premature budget.",
+            f"- **Plain Language Outcome**: {op_data['dominance_finding']} "
+            "Against the tuned text heuristic and the per-user threshold control (no model), the paired differences span zero or favor the baseline, "
+            "so the Decider's added value over tuned model-free baselines is not established on this SYNTHETIC benchmark. "
+            "At Point B both Decider variants sit at the max-hold cap.",
         ])
 
     t0_report = time.perf_counter()

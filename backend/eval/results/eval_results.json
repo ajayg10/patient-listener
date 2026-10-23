@@ -2108,7 +2108,7 @@
         "ci_high": 1604.5
       }
     },
-    "dominance_finding": "Fixed timeouts and text heuristic dominate Decider at both operating points: At Point A (equal delay budget <= 800ms), Text Heuristic achieves 800ms delay vs Decider 1501ms with comparable cut-in rate. At Point B (premature budget <= 5%), Fixed 950ms and Text Heuristic 950ms achieve 950ms delay with 3.3% and 2.5% cut-ins, whereas Decider waited 2200ms (+1250ms slower) to eliminate cut-ins."
+    "dominance_finding": "Point A (delay budget), by point estimate: Per-User Control beats Decider on both axes (4.2% at 808 ms vs 10.0% at 1501 ms); Decider + Profile beats Fixed Timeout on both axes (8.1% at 551 ms vs 18.9% at 800 ms); Decider + Profile beats Text Heuristic on both axes (8.1% at 551 ms vs 11.1% at 800 ms). Point B (premature budget), by point estimate: no row dominates another on both axes; each trades cut-ins against delay."
   },
   "b0_validation_subset": {
     "num_cases": 40,
@@ -2365,13 +2365,13 @@
     "2200.0"
   ],
   "stage_timings_s": {
-    "stage_1_load_cache_data": 0.06,
-    "stage_2_dev_calibration": 0.014,
-    "stage_3_replay_evaluation": 0.289,
-    "stage_4_bootstrap_cis": 0.207,
-    "stage_5_sweeps_reliability": 0.841,
-    "stage_5b_operating_points": 2.278,
+    "stage_1_load_cache_data": 0.067,
+    "stage_2_dev_calibration": 0.016,
+    "stage_3_replay_evaluation": 0.305,
+    "stage_4_bootstrap_cis": 0.203,
+    "stage_5_sweeps_reliability": 0.661,
+    "stage_5b_operating_points": 2.26,
     "stage_6_report_writing": 0.001,
-    "total_seconds": 3.708
+    "total_seconds": 3.534
   }
 }

@@ -58,7 +58,7 @@
 | Decider+Profile vs Per-User Control | Per-User Control (scale 1.10) | Strands Decider 2B + Profile (hi=0.50) | +1508.3 ms | [+1403.8, +1604.5] ms |
 
 ### Dominance Analysis at Operating Points
-- Fixed timeouts and text heuristic dominate Decider at both operating points: At Point A (equal delay budget <= 800ms), Text Heuristic achieves 800ms delay vs Decider 1501ms with comparable cut-in rate. At Point B (premature budget <= 5%), Fixed 950ms and Text Heuristic 950ms achieve 950ms delay with 3.3% and 2.5% cut-ins, whereas Decider waited 2200ms (+1250ms slower) to eliminate cut-ins.
+- Point A (delay budget), by point estimate: Per-User Control beats Decider on both axes (4.2% at 808 ms vs 10.0% at 1501 ms); Decider + Profile beats Fixed Timeout on both axes (8.1% at 551 ms vs 18.9% at 800 ms); Decider + Profile beats Text Heuristic on both axes (8.1% at 551 ms vs 11.1% at 800 ms). Point B (premature budget), by point estimate: no row dominates another on both axes; each trades cut-ins against delay.
 
 ## 1B. Exploratory Full Benchmark Comparison (19 Latency & Sensitivity Configurations)
 
@@ -182,7 +182,7 @@
 ### A. Operating Points Performance (Points A & B)
 - **Point A (Delay Budget <= 800ms)**: Strands Decider 2B achieves 10.0% premature rate and 1501 ms delay P50 (2200 ms P95). The Fixed Timeout (800ms) yields 18.9% premature rate and 800 ms delay P50. The Text Heuristic (800ms) yields 11.1% premature rate and 800 ms delay P50. The Per-User Control yields 4.2% premature rate and 808 ms delay P50. Decider+Profile achieves 8.1% premature rate and 551 ms delay P50.
 - **Point B (Premature Budget <= 5.0%)**: Strands Decider 2B achieves 0.0% premature rate and 2200 ms delay P50 (2200 ms P95). The Fixed Timeout (950ms) yields 3.3% premature rate and 950 ms delay P50. The Text Heuristic (950ms) yields 2.5% premature rate and 950 ms delay P50. The Per-User Control yields 7.5% premature rate and 778 ms delay P50. Decider+Profile achieves 0.0% premature rate and 2200 ms delay P50.
-- **Dominance Analysis**: Fixed timeouts and text heuristic dominate Decider at both operating points: At Point A (equal delay budget <= 800ms), Text Heuristic achieves 800ms delay vs Decider 1501ms with comparable cut-in rate. At Point B (premature budget <= 5%), Fixed 950ms and Text Heuristic 950ms achieve 950ms delay with 3.3% and 2.5% cut-ins, whereas Decider waited 2200ms (+1250ms slower) to eliminate cut-ins.
+- **Dominance Analysis**: Point A (delay budget), by point estimate: Per-User Control beats Decider on both axes (4.2% at 808 ms vs 10.0% at 1501 ms); Decider + Profile beats Fixed Timeout on both axes (8.1% at 551 ms vs 18.9% at 800 ms); Decider + Profile beats Text Heuristic on both axes (8.1% at 551 ms vs 11.1% at 800 ms). Point B (premature budget), by point estimate: no row dominates another on both axes; each trades cut-ins against delay.
 
 ### B. Paired Differences at Operating Points
 - **Point A (Premature Rate Difference at Delay Budget <= 800ms)**: Decider minus Fixed 800ms: -8.9% [-15.6%, -3.0%]; Decider minus Text Heuristic: -1.1% [-5.6%, +3.3%]; Decider+Profile minus Decider: -1.9% [-5.8%, +1.1%]; Decider+Profile minus Per-User Control: +3.9% [-1.1%, +8.6%].
@@ -200,4 +200,4 @@
 - **Q1+Q2 Conflict Rule Effect**: Across 1800 evaluated pause checkpoints on the test split, exactly 0 checkpoints exhibited conflict (Q1 p(RESPOND) >= 0.55 and Q2 p(YES) >= 0.50).
 
 ### E. Outcome & Summary Verdict
-- **Plain Language Outcome**: Across both operating points (Point A equal delay budget and Point B equal premature budget), the Fixed Timeout and Text Heuristic baselines dominate the Strands Decider 2B. At Point A, Fixed Timeout achieves 800.0 ms delay P50, while Decider exhibits 1501.2 ms delay P50. At Point B, Fixed Timeout (950ms) achieves a 3.3% premature rate and 950.0 ms delay P50, whereas Decider exhibits 2200.0 ms delay P50 (+1353.2 ms slower). Decider does not beat the baselines at equal delay or equal premature budget.
+- **Plain Language Outcome**: Point A (delay budget), by point estimate: Per-User Control beats Decider on both axes (4.2% at 808 ms vs 10.0% at 1501 ms); Decider + Profile beats Fixed Timeout on both axes (8.1% at 551 ms vs 18.9% at 800 ms); Decider + Profile beats Text Heuristic on both axes (8.1% at 551 ms vs 11.1% at 800 ms). Point B (premature budget), by point estimate: no row dominates another on both axes; each trades cut-ins against delay. Against the tuned text heuristic and the per-user threshold control (no model), the paired differences span zero or favor the baseline, so the Decider's added value over tuned model-free baselines is not established on this SYNTHETIC benchmark. At Point B both Decider variants sit at the max-hold cap.
