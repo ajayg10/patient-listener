@@ -16,6 +16,7 @@ import { parseSSEStream } from "./sse";
 import { ReplayTimeline, type SpeechSegment } from "./ReplayTimeline";
 import { ResultsDashboard } from "./ResultsDashboard";
 import { formatDelayLine } from "./resultLine";
+import { formatEngineSummary, summarizeDemoSet, type EngineOutcome, type ScenarioOutcome } from "./demoTally";
 
 interface DecisionEntry {
   checkpointMs: number;
@@ -45,19 +46,16 @@ export const App: React.FC = () => {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isDemoSetRunning, setIsDemoSetRunning] = useState<boolean>(false);
   const [demoSetIndex, setDemoSetIndex] = useState<number>(0);
-  const [demoSetTally, setDemoSetTally] = useState<{
-    total: number;
-    fixedInterrupted: number;
-    plInterrupted: number;
-    fixedDelays: number[];
-    plDelays: number[];
-  }>({
-    total: 0,
-    fixedInterrupted: 0,
-    plInterrupted: 0,
-    fixedDelays: [],
-    plDelays: [],
-  });
+  const [demoOutcomes, setDemoOutcomes] = useState<ScenarioOutcome[]>([]);
+  const [demoSetSize, setDemoSetSize] = useState<number>(0);
+  // Outcome of the replay currently streaming, filled from its own events only.
+  const runOutcomeRef = useRef<{
+    fixed: EngineOutcome | null;
+    patientListener: EngineOutcome | null;
+    fixedRespondedAt: number | null;
+    plRespondedAt: number | null;
+    error: string | null;
+  }>({ fixed: null, patientListener: null, fixedRespondedAt: null, plRespondedAt: null, error: null });
 
   const [replayError, setReplayError] = useState<ReplayErrorInfo | null>(null);
 
@@ -151,6 +149,7 @@ export const App: React.FC = () => {
     setDecisionsFeed([]);
     setReplayError(null);
     activeSegmentStartRef.current = null;
+    runOutcomeRef.current = { fixed: null, patientListener: null, fixedRespondedAt: null, plRespondedAt: null, error: null };
     setFixedState({
       responded: false,
       respondedAtMs: null,
@@ -178,6 +177,7 @@ export const App: React.FC = () => {
         state_key: ev.state_key,
         state_text: ev.state_text,
       });
+      runOutcomeRef.current.error = shortMsg;
       setIsRunning(false);
       return;
     }
@@ -237,6 +237,7 @@ export const App: React.FC = () => {
       case "respond": {
         if (ev.engine === "fixed") {
           fixedRespondedRef.current = true;
+          runOutcomeRef.current.fixedRespondedAt = ev.t_ms;
           setFixedState((prev) => ({
             ...prev,
             responded: true,
@@ -244,6 +245,7 @@ export const App: React.FC = () => {
           }));
         } else if (ev.engine === "patient_listener") {
           plRespondedRef.current = true;
+          runOutcomeRef.current.plRespondedAt = ev.t_ms;
           setPlState((prev) => ({
             ...prev,
             responded: true,
@@ -262,11 +264,11 @@ export const App: React.FC = () => {
             interrupted: ev.interrupted,
             responseDelayMs: ev.response_delay_ms,
           }));
-          setDemoSetTally((prev) => ({
-            ...prev,
-            fixedInterrupted: prev.fixedInterrupted + (ev.interrupted ? 1 : 0),
-            fixedDelays: ev.response_delay_ms !== null ? [...prev.fixedDelays, ev.response_delay_ms] : prev.fixedDelays,
-          }));
+          runOutcomeRef.current.fixed = {
+            interrupted: ev.interrupted,
+            respondedAtMs: runOutcomeRef.current.fixedRespondedAt,
+            responseDelayMs: ev.response_delay_ms ?? null,
+          };
         } else if (ev.engine === "patient_listener") {
           if (ev.interrupted) {
             plRespondedRef.current = true;
@@ -276,12 +278,11 @@ export const App: React.FC = () => {
             interrupted: ev.interrupted,
             responseDelayMs: ev.response_delay_ms,
           }));
-          setDemoSetTally((prev) => ({
-            ...prev,
-            total: prev.total + 1,
-            plInterrupted: prev.plInterrupted + (ev.interrupted ? 1 : 0),
-            plDelays: ev.response_delay_ms !== null ? [...prev.plDelays, ev.response_delay_ms] : prev.plDelays,
-          }));
+          runOutcomeRef.current.patientListener = {
+            interrupted: ev.interrupted,
+            respondedAtMs: runOutcomeRef.current.plRespondedAt,
+            responseDelayMs: ev.response_delay_ms ?? null,
+          };
         }
         break;
       }
@@ -345,21 +346,26 @@ export const App: React.FC = () => {
     if (demoScenarios.length === 0) return;
 
     setIsDemoSetRunning(true);
-    setDemoSetTally({
-      total: 0,
-      fixedInterrupted: 0,
-      plInterrupted: 0,
-      fixedDelays: [],
-      plDelays: [],
-    });
+    setDemoOutcomes([]);
+    setDemoSetSize(demoScenarios.length);
 
     for (let i = 0; i < demoScenarios.length; i++) {
       setDemoSetIndex(i);
       const sc = demoScenarios[i];
       setSelectedScenarioId(sc.id);
 
+      // false only on cancel or a failed request; a stream error event still returns true
       const success = await runReplay(sc.id, speed);
       if (!success) break;
+      const r = runOutcomeRef.current;
+      const outcome: ScenarioOutcome = {
+        scenarioId: sc.id,
+        trueEndMs: sc.true_end_t_ms,
+        fixed: r.fixed,
+        patientListener: r.patientListener,
+        error: r.error,
+      };
+      setDemoOutcomes((prev) => [...prev, outcome]);
 
       // Small pause between scenarios
       await new Promise((r) => setTimeout(r, 600));
@@ -526,44 +532,32 @@ export const App: React.FC = () => {
             </div>
 
             {/* Running Demo Set Tally Banner */}
-            {(isDemoSetRunning || demoSetTally.total > 0) && (
-              <div className="bg-indigo-950/60 border border-indigo-700/60 rounded-xl p-3 flex flex-wrap items-center justify-between text-xs text-indigo-200 shadow-md">
-                <div className="flex items-center gap-2">
-                  <FastForward className={`w-4 h-4 text-indigo-400 ${isDemoSetRunning ? "animate-pulse" : ""}`} />
-                  <span className="font-semibold">
-                    {isDemoSetRunning
-                      ? `Demo Set Running: Scenario ${demoSetIndex + 1} of ${scenarios.filter((s) => s.demo).length}`
-                      : `Demo Set Completed (${demoSetTally.total} scenarios evaluated)`}
-                  </span>
+            {(isDemoSetRunning || demoOutcomes.length > 0) && (() => {
+              const tally = summarizeDemoSet(demoOutcomes);
+              return (
+                <div className="bg-indigo-950/60 border border-indigo-700/60 rounded-xl p-3 flex flex-col gap-2 text-sm text-indigo-200 shadow-md">
+                  <div className="flex items-center gap-2">
+                    <FastForward className={`w-4 h-4 text-indigo-400 ${isDemoSetRunning ? "animate-pulse" : ""}`} />
+                    <span className="font-semibold">
+                      {isDemoSetRunning
+                        ? `Demo set running: scenario ${demoSetIndex + 1} of ${demoSetSize}`
+                        : `Demo set finished: ${tally.evaluated} of ${demoSetSize} scenarios evaluated`}
+                      {tally.errored > 0 ? ` (${tally.errored} errored)` : ""}
+                    </span>
+                  </div>
+                  <div className="font-mono text-xs flex flex-col gap-1">
+                    <span>
+                      Fixed 800 ms: <strong className="text-rose-400">{tally.fixed.cutIns} cut-ins</strong>;{" "}
+                      {formatEngineSummary(tally.fixed)}
+                    </span>
+                    <span>
+                      Patient Listener: <strong className="text-emerald-400">{tally.patientListener.cutIns} cut-ins</strong>;{" "}
+                      {formatEngineSummary(tally.patientListener)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-6 font-mono text-[11px]">
-                  <span>
-                    Fixed Cut-ins: <strong className="text-rose-400 font-bold">{demoSetTally.fixedInterrupted}</strong>
-                  </span>
-                  <span>
-                    Patient Listener Cut-ins: <strong className="text-emerald-400 font-bold">{demoSetTally.plInterrupted}</strong>
-                  </span>
-                  <span>
-                    Fixed Mean Delay:{" "}
-                    <strong className="text-slate-100 font-bold">
-                      {demoSetTally.fixedDelays.length > 0
-                        ? Math.round(demoSetTally.fixedDelays.reduce((a, b) => a + b, 0) / demoSetTally.fixedDelays.length)
-                        : 0}{" "}
-                      ms
-                    </strong>
-                  </span>
-                  <span>
-                    PL Mean Delay:{" "}
-                    <strong className="text-slate-100 font-bold">
-                      {demoSetTally.plDelays.length > 0
-                        ? Math.round(demoSetTally.plDelays.reduce((a, b) => a + b, 0) / demoSetTally.plDelays.length)
-                        : 0}{" "}
-                      ms
-                    </strong>
-                  </span>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Error Banner */}
             {replayError && (
