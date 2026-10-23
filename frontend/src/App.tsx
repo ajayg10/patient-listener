@@ -375,85 +375,134 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30">
-      {/* Top Provenance Banner */}
-      {isMock ? (
-        <div className="w-full bg-rose-900 border-b border-rose-700/80 px-4 py-2.5 text-center text-xs text-rose-100 font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-md">
-          <ShieldAlert className="w-4 h-4 text-rose-300" />
-          <span>MOCK-DECIDER, not valid for the demo — real GPU decision cache not installed</span>
-        </div>
-      ) : (
-        <div className="w-full bg-emerald-950/80 border-b border-emerald-600/60 px-4 py-2 text-center text-xs text-emerald-200 font-medium tracking-wide flex items-center justify-center gap-2 shadow-md">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>
-            Decisions: real Strands Decider 2B (cached), decision latency{" "}
-            {health?.cache_provenance?.decision_latency_ms
-              ? Math.round(health.cache_provenance.decision_latency_ms)
-              : 301}{" "}
-            ms measured on {health?.cache_provenance?.latency_source || "Tesla T4 (cache-measured)"}
-          </span>
-        </div>
-      )}
-
+    <div className="min-h-screen text-slate-100 flex flex-col font-sans">
       {/* Main App Header */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-emerald-500 flex items-center justify-center shadow-md shadow-indigo-500/20">
-              <Zap className="w-5 h-5 text-white" />
+      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-md bg-indigo-300 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-slate-950" />
+              </div>
+              <span className="font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-slate-50 leading-tight">
+                Patient
+                <br />
+                Listener_
+              </span>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                Patient Listener
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-indigo-300 border border-slate-700">
-                  Strands Decider 2B
-                </span>
-              </h1>
-              <p className="text-[11px] text-slate-400">
-                Personalized, regret-aware voice turn-taking with speculative System One decisions
-              </p>
-            </div>
+
+            {/* Tab Navigation: monospace uppercase links */}
+            <nav className="flex items-center gap-7">
+              {([
+                ["demo", "Side-by-side", Play],
+                ["results", "Results", BarChart2],
+              ] as const).map(([tab, label, Icon]) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex items-center gap-2 py-5 font-mono text-[13px] uppercase tracking-[0.14em] border-b-2 transition ${
+                    activeTab === tab
+                      ? "text-slate-50 border-indigo-300"
+                      : "text-slate-400 border-transparent hover:text-slate-200"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {label}
+                </button>
+              ))}
+            </nav>
           </div>
 
-          {/* Tab Navigation */}
-          <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setActiveTab("demo")}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
-                activeTab === "demo"
-                  ? "bg-indigo-600 text-white shadow"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
-              }`}
-            >
-              <Play className="w-3.5 h-3.5" />
-              Side-by-Side Demo
-            </button>
-            <button
-              onClick={() => setActiveTab("results")}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
-                activeTab === "results"
-                  ? "bg-indigo-600 text-white shadow"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
-              }`}
-            >
-              <BarChart2 className="w-3.5 h-3.5" />
-              Benchmark Results
-            </button>
-          </div>
+          <span className="hidden md:inline font-mono text-[11px] uppercase tracking-[0.14em] text-slate-400">
+            #strands-decider-2b · #policy
+          </span>
         </div>
       </header>
 
+      {/* Hero: headline with live turn switch + provenance card */}
+      <section className="max-w-7xl w-full mx-auto px-6 pt-10 pb-6 grid lg:grid-cols-[1fr_380px] gap-8 items-start">
+        <div>
+          <div className="inline-flex items-center gap-2 border border-slate-700 rounded-md px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-400">
+            <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-indigo-300 animate-pulse" : "bg-slate-500"}`} />
+            {isRunning ? "Replay running" : "Voice turn-taking · Strands Decider 2B"}
+          </div>
+          <h1 className="mt-5 font-display text-5xl md:text-6xl font-semibold leading-[1.02] text-slate-50">
+            Patient Listener{" "}
+            <span
+              aria-label={plState.responded ? "Responding" : "Listening"}
+              className={`inline-flex align-middle w-[86px] h-[46px] rounded-full p-[5px] transition-colors duration-300 ${
+                plState.responded ? "bg-indigo-400" : "bg-slate-800"
+              }`}
+            >
+              <span
+                className={`w-9 h-9 rounded-full transition-transform duration-300 ${
+                  plState.responded ? "translate-x-[40px] bg-slate-50" : "translate-x-0 bg-slate-500"
+                }`}
+              />
+            </span>
+          </h1>
+          <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-200">
+            Fixed silence timeouts cut people off mid-thought. Patient Listener asks a small decision model
+            whether you're actually done, and waits when you're not.
+          </p>
+        </div>
+
+        {/* Provenance card */}
+        <div className="border border-slate-800 bg-slate-950/70 rounded-md">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-400">
+            <span>Decision source</span>
+            {isMock ? (
+              <span className="flex items-center gap-1.5 text-rose-400">
+                <ShieldAlert className="w-3.5 h-3.5" /> Mock
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-emerald-400">
+                <ShieldCheck className="w-3.5 h-3.5" /> Real
+              </span>
+            )}
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            {isMock ? (
+              <p className="text-sm text-rose-300">
+                MOCK-DECIDER, not valid for the demo. The real GPU decision cache is not installed.
+              </p>
+            ) : (
+              <>
+                <div className="text-xl font-semibold text-slate-50">Strands Decider 2B</div>
+                <div className="font-mono text-xs text-slate-400 break-all">
+                  {health?.cache_provenance?.model_id ?? "cached decisions"}
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                  <div>
+                    <div className="label-mono">Latency</div>
+                    <div className="text-slate-100 text-sm mt-0.5">
+                      {health?.cache_provenance?.decision_latency_ms
+                        ? `${Math.round(health.cache_provenance.decision_latency_ms)} ms`
+                        : "n/a"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="label-mono">Hardware</div>
+                    <div className="text-slate-100 text-sm mt-0.5">{health?.cache_provenance?.hardware ?? "n/a"}</div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* Main Body Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-6 pb-10">
         {activeTab === "results" ? (
           <ResultsDashboard apiBase={apiBase} />
         ) : (
           <div className="space-y-6">
             {/* Control Strip (Scenario Picker + Speed + Run Controls) */}
-            <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
+            <div className="bg-slate-950/70 border border-slate-800 rounded-md p-5 flex flex-wrap items-end justify-between gap-5">
               {/* Scenario Picker */}
               <div className="flex-1 min-w-[320px]">
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                <label className="block label-mono mb-2">
                   Select Conversational Scenario
                 </label>
                 <select
@@ -463,7 +512,7 @@ export const App: React.FC = () => {
                     setSelectedScenarioId(e.target.value);
                     resetReplayState();
                   }}
-                  className="w-full bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                  className="w-full bg-slate-900 border border-slate-700 text-slate-100 text-sm rounded-md px-3 py-2.5 focus:outline-none focus:border-indigo-300 disabled:opacity-50"
                 >
                   {scenarios.map((sc) => (
                     <option key={sc.id} value={sc.id}>
@@ -477,7 +526,7 @@ export const App: React.FC = () => {
 
               {/* Speed Selector */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                <label className="block label-mono mb-2">
                   Replay Speed
                 </label>
                 <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
@@ -486,7 +535,7 @@ export const App: React.FC = () => {
                       key={s}
                       disabled={isRunning}
                       onClick={() => setSpeed(s)}
-                      className={`px-3 py-1 text-xs font-semibold rounded ${
+                      className={`px-3 py-1.5 font-mono text-xs rounded ${
                         speed === s
                           ? "bg-indigo-600 text-white"
                           : "text-slate-400 hover:text-slate-200"
@@ -499,12 +548,12 @@ export const App: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 pt-5">
+              <div className="flex items-center gap-2">
                 {!isRunning ? (
                   <button
                     onClick={startReplay}
                     disabled={!selectedScenarioId}
-                    className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+                    className="btn-accent flex items-center gap-2 px-5 py-2.5 rounded-md text-sm"
                   >
                     <Play className="w-4 h-4 fill-current" />
                     Start Replay
@@ -512,7 +561,7 @@ export const App: React.FC = () => {
                 ) : (
                   <button
                     onClick={cancelReplay}
-                    className="flex items-center gap-2 px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition shadow-lg shadow-rose-600/20"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium bg-rose-400 text-slate-950 hover:bg-rose-300 transition"
                   >
                     <Square className="w-4 h-4 fill-current" />
                     Cancel Replay
@@ -522,7 +571,7 @@ export const App: React.FC = () => {
                 <button
                   onClick={playDemoSet}
                   disabled={isRunning}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 font-semibold text-xs transition disabled:opacity-50"
+                  className="btn-outline flex items-center gap-2 px-4 py-2.5 rounded-md text-sm"
                   title="Run all demo-flagged scenarios in sequence"
                 >
                   <FastForward className="w-4 h-4 text-indigo-400" />

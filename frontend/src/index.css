@@ -4,22 +4,50 @@
 
 @layer base {
   body {
-    @apply bg-background text-gray-100 font-sans antialiased min-h-screen selection:bg-primary selection:text-white;
+    @apply text-slate-100 font-sans antialiased min-h-screen;
+    background-color: #141c21;
+    /* faint vertical pinstripes plus a soft top glow, like the reference page */
+    background-image:
+      radial-gradient(1200px 500px at 50% -10%, rgba(168, 211, 221, 0.06), transparent 70%),
+      repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 7px);
+    background-attachment: fixed;
+  }
+  ::selection {
+    background: rgba(168, 211, 221, 0.35);
+    color: #f5f1ea;
+  }
+  h1, h2, h3 {
+    font-family: "Geist", "Inter", sans-serif;
+    letter-spacing: -0.025em;
   }
 }
 
-/* Custom scrollbars */
+@layer components {
+  /* small uppercase monospace label, used for section and field labels */
+  .label-mono {
+    @apply font-mono text-[11px] uppercase tracking-[0.14em] text-slate-400;
+  }
+  /* pale teal primary button */
+  .btn-accent {
+    @apply bg-indigo-300 text-slate-950 hover:bg-indigo-200 font-medium transition disabled:opacity-50;
+  }
+  /* outlined dark button */
+  .btn-outline {
+    @apply bg-slate-950/60 text-slate-100 border border-slate-700 hover:border-slate-500 font-medium transition disabled:opacity-50;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: #11171b;
 }
 ::-webkit-scrollbar-thumb {
-  background: #374151;
+  background: #323c42;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
+  background: #4a565c;
 }
