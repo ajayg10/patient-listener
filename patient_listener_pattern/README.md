@@ -56,6 +56,8 @@ The pattern implements Strands' native typed intervention interface from `strand
 
 ## Configurable Thresholds
 
+> The defaults below are placeholders. Calibrate them on your own users with an explicit delay budget. On this repo's synthetic benchmark the dev-chosen value at Point A was hi = 0.30 (see results.md).
+
 `PolicyThresholds` parameters can be configured per persona or globally:
 
 | Parameter | Type | Default | Description |
