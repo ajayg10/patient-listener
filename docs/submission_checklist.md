@@ -8,5 +8,6 @@ Deadline: Oct 23, 11:59 PM PDT (Oct 24, 12:29 PM IST). Aim to submit by 11:30 AM
 - [ ] Builder Center article published from `docs/article_draft.md`, with the repo and video links
 - [ ] Tags: `#strands-decider-2b` and `#policy`
 - [ ] Pattern files: `patient_listener_pattern/` (handler, decision policy, example, README, tests)
-- [ ] Measured vs synthetic statement present: real Decider decisions (T4 cache), synthetic dataset, Bedrock blocked and mock reply used
-- [ ] Teammate deletes any temporary AWS keys or roles after submitting
+- [ ] Live demo link works: https://main.d179rqv15h3x1f.amplifyapp.com (API on Lambda, replies from Bedrock)
+- [ ] Measured vs synthetic statement present: real Decider decisions (T4 cache), synthetic dataset, real Bedrock replies
+- [ ] After judging: delete the Lambda `patient-listener-api`, its role `patient-listener-lambda-role` and the Amplify app `patient-listener` if you don't want to keep them

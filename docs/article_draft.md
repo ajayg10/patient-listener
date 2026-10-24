@@ -15,7 +15,8 @@ Patient Listener is a turn-taking policy for voice agents built on Strands Decid
 - At silence checkpoints (250, 500, 800, 1,200 and 1,800 ms) the turn manager builds a short state: the last ~40 words, the silence so far, and optionally a one-line summary of that user's pause habits from earlier sessions.
 - It asks Decider one typed question, `turn_complete`, with two options, WAIT or RESPOND, and gets back a probability.
 - A small policy turns that into an action: RESPOND if p(done) is high enough, WAIT otherwise, and a hard max-hold cap of 2,200 ms so it never waits forever.
-- Only on RESPOND does the reply agent, a Strands Agent on Amazon Bedrock, start generating.
+- Only on RESPOND does the reply agent, a Strands Agent on Amazon Bedrock (Claude Haiku 4.5), start generating.
+- Every "you cut me off" is logged as a regret and folded into that user's pace profile, so the next decision for them is more patient.
 
 The decision runs speculatively. A generation counter drops stale answers, and new speech cancels a pending decision, so a slow decision can never make the agent talk over someone who has resumed.
 
@@ -50,7 +51,9 @@ So the honest summary is that the Decider clearly beats a fixed timeout. Persona
 
 **Mock results almost fooled me.** Early on, my "Decider" numbers came from a rule-based mock that shared rules with the data generator, and a one-line regex scored 100%. I added provenance to every cache and table so mock numbers can't reach a headline.
 
-**Bedrock.** Every Bedrock call on the accounts we had failed with `Operation not allowed`, including in the console Playground and after a plan upgrade. The reply path is wired to Bedrock in code. The demo uses the mock reply, and I don't claim Bedrock output I didn't get.
+**Bedrock access.** On the first AWS account we tried, every Bedrock call failed with `Operation not allowed`, even in the console Playground and after a plan upgrade. On a second account it worked immediately. The demo now streams a real Claude Haiku 4.5 reply from Bedrock as soon as Patient Listener decides to respond, and falls back to a labeled mock reply if a call fails.
+
+**Deploying it.** The API runs on AWS Lambda behind a Function URL, using the Lambda Web Adapter so the replay's streamed events still work, and the frontend is on Amplify Hosting. Two Windows gotchas cost me time: pip evaluates Windows-only dependency markers even when downloading Linux wheels (uv doesn't), and PowerShell's `Compress-Archive` writes backslash paths that Amplify serves as 404s.
 
 ## Reuse it
 
@@ -65,4 +68,5 @@ Calibrate the thresholds on your own users. If you only have a CPU, start with t
 
 Synthetic text from 60 templates, no real audio, 30 test users, and a dataset with little per-user headroom. Operating points chosen on dev drifted on test. T4 numbers used reference kernels.
 
+Live demo: https://main.d179rqv15h3x1f.amplifyapp.com
 Repo: https://github.com/ajayg10/patient-listener

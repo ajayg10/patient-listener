@@ -49,11 +49,13 @@ flowchart LR
 
 Prerequisites: Python 3.11, Node 20+, and [uv](https://docs.astral.sh/uv/) (`pip install uv`).
 
+Or just open the live site: https://main.d179rqv15h3x1f.amplifyapp.com
+
 ```powershell
 git clone https://github.com/ajayg10/patient-listener.git
 cd patient-listener
 uv sync --extra dev
-$env:MOCK_BEDROCK="1"
+$env:MOCK_BEDROCK="1"   # set to 0 to generate replies with Amazon Bedrock
 uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -100,7 +102,14 @@ Calibrate the thresholds on your own data. The values here come from this synthe
 
 ## Bedrock
 
-The reply agent (`backend/app/reply_agent.py`) is a Strands Agent on `BedrockModel` with streaming. On the accounts available to us, every Bedrock call (Nova Micro and Claude Haiku 4.5 through the Converse API, and Nova Micro in the console Playground) failed with `ValidationException: Operation not allowed`, including after upgrading the plan. The demo therefore runs with `MOCK_BEDROCK=1` and a mock reply. The Bedrock path is in the code, but I did not get Bedrock output and don't claim any.
+The reply agent (`backend/app/reply_agent.py`) is a Strands Agent on `BedrockModel` (Claude Haiku 4.5, `us.anthropic.claude-haiku-4-5-20251001-v1:0`) with streaming. In the replay, the moment Patient Listener decides RESPOND, the user's words go to Bedrock and the reply streams into the right-hand panel with the model name and time to first token. The fixed-timeout engine never calls Bedrock. If a Bedrock call fails, the replay continues with a mock reply that is labeled "Mock reply" in the UI. Set `MOCK_BEDROCK=0` to use Bedrock locally (credentials come from your normal AWS profile); tests always use the mock.
+
+## Live deployment
+
+- Frontend (Amplify Hosting): https://main.d179rqv15h3x1f.amplifyapp.com
+- API (AWS Lambda Function URL, response streaming): https://segabhplz5dsghnz7nzvt65hcq0bjihq.lambda-url.us-east-1.on.aws/health
+
+The API runs FastAPI on Lambda through the [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter) layer, so the replay's event stream works over a plain Function URL. The Lambda serves cached Decider decisions (it never loads the 2B model) and calls Bedrock for the reply. Its role can only write logs and invoke Bedrock models. Regrets logged on the live site are stored in the function's `/tmp` and reset when the instance is recycled. Redeploy with `.\scripts\deploy_aws.ps1` (needs the AWS CLI with your credentials).
 
 ## Limits
 
@@ -108,7 +117,7 @@ The reply agent (`backend/app/reply_agent.py`) is a Strands Agent on `BedrockMod
 - Per-user headroom in this dataset is small (archetype-aware vs user-aware reference: 81.4% vs 81.9%).
 - Operating points chosen on dev did not transfer exactly to test (Decider at Point A: test median delay above the 800 ms budget; per-user control at Point B: test cut-ins above 5%). Dev has only 15 users.
 - T4 numbers use reference kernels (`causal_conv1d` and `flash-linear-attention` not installed). Latency on other hardware will differ.
-- Replay uses cached decisions. Live mic input (F2) was cut for time.
+- Replay uses cached decisions. Live mic input was cut for time.
 
 ## Repo map
 

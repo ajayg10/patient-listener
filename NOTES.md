@@ -24,7 +24,7 @@
 | E4 | Calibration audit & operating point analysis | DONE | 2026-10-22 |
 | F2 | Live view | TODO | |
 | F3 | Side-by-side demo mode | DONE | 2026-10-22 |
-| F4 | Profile + regret UI | TODO | |
+| F4 | Profile + regret UI | DONE | 2026-10-24 |
 | F5 | Results dashboard + polish | TODO | |
 | R1 | Ship (submission bundle & docs) | DONE | 2026-10-24 |
 
@@ -1453,6 +1453,8 @@
   * Decider+Profile (Argmax): Policy triggers = 0 / 181, Cap triggers = 181 / 181 | Premature = 0.0%, Delay P50 = 2200.0 ms, Delay P95 = 2200.0 ms.
 
 ## Article material (running list)
+- **Bedrock live (2026-10-24)**: on a second AWS account Bedrock Converse works (Nova Micro and Claude Haiku 4.5, about 1.1 to 1.7 s per short reply). The replay now streams a Claude Haiku 4.5 reply after Patient Listener's RESPOND; first token measured at 530 to 1392 ms in browser and curl runs.
+- **Deployment (2026-10-24)**: API on Lambda (python3.12, Lambda Web Adapter layer, Function URL in RESPONSE_STREAM mode, role with logs plus bedrock:InvokeModel only), frontend on Amplify Hosting via manual zip deployment. Gotchas: pip evaluates win32 markers when cross-downloading Linux wheels (switched to uv --python-platform); numpy 2.4 needs manylinux_2_28 so python3.11 (Amazon Linux 2) could not be used; Compress-Archive on PowerShell 5.1 writes backslash zip paths that Amplify serves as 404; psutil was imported but not declared.
 - **Correction (2026-10-24)**: earlier notes below say fixed timeouts and the heuristic dominate the Decider at both operating points. That was a hardcoded sentence and wrong for Point A: Decider+Profile (8.1% at 551 ms) beats fixed 800 (18.9% at 800 ms) and the text heuristic (11.1% at 800 ms) on both axes by point estimate. The dominance text is now computed in run_eval.describe_dominance. Paired differences vs the heuristic and per-user control still span zero.
 - **Progress note (fix: correct demo set tally)**: tally built per scenario from that run's own final events; verified 10 of 10 scenarios, fixed 10 cut-ins, Patient Listener 0 cut-ins.
 - **Progress note (fix: shorten cache miss banner)**: Shortened cache miss error banner message with collapsed details element revealing state key and text; verified with curl SSE replay.
