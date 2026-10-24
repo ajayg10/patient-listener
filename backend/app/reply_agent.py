@@ -31,9 +31,11 @@ class ReplyAgent:
                 )
                 self.agent = Agent(
                     model=self.model,
+                    callback_handler=None,
                     system_prompt=(
-                        "You are an empathetic, patient clinical intake assistant. "
-                        "Respond clearly, concisely, and reassuringly to the patient."
+                        "You are an empathetic, patient clinical intake assistant on a voice call. "
+                        "The caller has just finished speaking. Reply in one or two short spoken "
+                        "sentences, clearly and reassuringly. No lists, no markdown."
                     ),
                 )
             except Exception as e:

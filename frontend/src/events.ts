@@ -247,6 +247,28 @@ export interface ReplayErrorEvent {
   t_ms?: number;
 }
 
+// Reply streamed by the Patient Listener engine after RESPOND (backend/app/main.py _stream_reply_into)
+export interface ReplayReplyChunkEvent {
+  event: "reply_chunk";
+  engine: "patient_listener";
+  text: string;
+  reply_source: "bedrock" | "mock";
+  model_id: string | null;
+  t_ms: number;
+}
+
+export interface ReplayReplyDoneEvent {
+  event: "reply_done";
+  engine: "patient_listener";
+  full_reply: string;
+  reply_source: "bedrock" | "mock";
+  model_id: string | null;
+  first_token_ms: number | null;
+  total_ms: number;
+  error: string | null;
+  t_ms: number;
+}
+
 export type ReplayEvent =
   | ReplayMetadataEvent
   | ReplayAudioEvent
@@ -255,7 +277,9 @@ export type ReplayEvent =
   | ReplayDecisionDroppedEvent
   | ReplayRespondEvent
   | ReplayFinalEvent
-  | ReplayErrorEvent;
+  | ReplayErrorEvent
+  | ReplayReplyChunkEvent
+  | ReplayReplyDoneEvent;
 
 export interface HealthResponse {
   status: string;
@@ -276,6 +300,7 @@ export interface HealthResponse {
     region: string;
     mock_mode: boolean;
     error?: string;
+    last_call?: { status: string; model_id?: string; first_token_ms?: number; total_ms?: number; error?: string | null };
   };
 }
 

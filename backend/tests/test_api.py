@@ -32,7 +32,8 @@ def test_health_endpoint(client: TestClient) -> None:
     assert data["status"] == "healthy"
     assert "cache_provenance" in data
     assert "bedrock_status" in data
-    assert data["bedrock_status"]["status"] == "SKIPPED"
+    assert data["bedrock_status"]["status"] in ("mock", "enabled")
+    assert "last_call" in data["bedrock_status"]
     assert "policy" in data
     assert data["policy"]["hi"] == 0.30
     assert data["policy"]["lo"] == 0.30
@@ -261,3 +262,55 @@ def test_plots_endpoint(client: TestClient) -> None:
     resp_bad = client.get("/plots/malicious_or_unknown.png")
     assert resp_bad.status_code == 404
 
+
+
+def _replay_events(client: TestClient, scenario_id: str) -> list[dict]:
+    resp = client.post(f"/replay/{scenario_id}?speed=1000")
+    assert resp.status_code == 200
+    return [json.loads(line[6:]) for line in resp.text.splitlines() if line.startswith("data: ")]
+
+
+def _demo_scenario(client: TestClient) -> str:
+    scenarios = client.get("/scenarios").json()
+    demo = [s for s in scenarios if s.get("demo")]
+    assert demo, "expected demo-flagged scenarios"
+    return demo[0]["id"]
+
+
+def test_replay_streams_reply_after_patient_listener_responds(client: TestClient) -> None:
+    """After Patient Listener's RESPOND, a reply is streamed and labeled (mock in tests)."""
+    with patch.object(ReplyAgent, "__init__", lambda self, cfg=None, mock=None: _mock_agent_init(self)):
+        events = _replay_events(client, _demo_scenario(client))
+    kinds = [e["event"] for e in events]
+    assert "reply_chunk" in kinds and kinds[-1] == "reply_done"
+    done = events[-1]
+    assert done["engine"] == "patient_listener"
+    assert done["reply_source"] == "mock"
+    assert done["full_reply"]
+    # the reply starts only after Patient Listener decided to respond
+    pl_respond = [e for e in events if e["event"] == "respond" and e["engine"] == "patient_listener"]
+    assert pl_respond and kinds.index("reply_chunk") > kinds.index("respond")
+
+
+def test_replay_falls_back_to_mock_when_bedrock_fails(client: TestClient) -> None:
+    """A failing Bedrock stream never ends the replay: reply_done is labeled mock with the error."""
+
+    async def boom(self, prompt):
+        raise RuntimeError("bedrock unavailable")
+        yield ""  # pragma: no cover
+
+    with patch.object(ReplyAgent, "__init__", lambda self, cfg=None, mock=None: _live_agent_init(self)), \
+         patch.object(ReplyAgent, "stream_reply", boom):
+        events = _replay_events(client, _demo_scenario(client))
+    done = events[-1]
+    assert done["event"] == "reply_done"
+    assert done["reply_source"] == "mock"
+    assert "bedrock unavailable" in (done["error"] or "")
+
+
+def _mock_agent_init(self) -> None:
+    self.mock, self.agent, self.model = True, None, None
+
+
+def _live_agent_init(self) -> None:
+    self.mock, self.agent, self.model = False, object(), None

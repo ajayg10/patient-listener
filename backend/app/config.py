@@ -46,7 +46,7 @@ class EnvSettings(BaseSettings):
     decider_torch_threads: int = 6
     hf_offline: bool = False
 
-    bedrock_model_id: str = "anthropic.claude-3-haiku-20240307-v1:0"
+    bedrock_model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     aws_region: str = "us-east-1"
     mock_bedrock: bool = True
 

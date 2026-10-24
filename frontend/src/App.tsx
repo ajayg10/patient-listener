@@ -27,6 +27,16 @@ interface DecisionEntry {
   arrivalMs: number;
 }
 
+interface SpeakerProfile {
+  user_id: string;
+  resumed_median_ms: number | null;
+  finished_median_ms: number | null;
+  filler_rate: number | null;
+  has_history: boolean;
+  rendered: string;
+  regrets_count: number;
+}
+
 interface ReplayErrorInfo {
   message: string;
   engine?: string;
@@ -93,7 +103,18 @@ export const App: React.FC = () => {
     responseDelayMs: null,
   });
 
+  // Reply generated after Patient Listener decides RESPOND (Bedrock, or labeled mock)
+  const [plReply, setPlReply] = useState<{
+    text: string;
+    source: "bedrock" | "mock" | null;
+    modelId: string | null;
+    firstTokenMs: number | null;
+    done: boolean;
+    error: string | null;
+  }>({ text: "", source: null, modelId: null, firstTokenMs: null, done: false, error: null });
+
   const abortControllerRef = useRef<AbortController | null>(null);
+  const fixedCutSilenceRef = useRef<number | null>(null);
   const activeSegmentStartRef = useRef<number | null>(null);
 
   const apiBase = (import.meta.env.VITE_API_URL as string) || "http://localhost:8000";
@@ -136,6 +157,51 @@ export const App: React.FC = () => {
   }, [apiBase]);
 
   const selectedScenario = scenarios.find((s) => s.id === selectedScenarioId);
+
+  // Speaker pace profile (from prior sessions + logged regrets)
+  const [profile, setProfile] = useState<SpeakerProfile | null>(null);
+  const [regretNote, setRegretNote] = useState<string>("");
+
+  const fetchProfile = async (user: string) => {
+    try {
+      const resp = await fetch(`${apiBase}/profile/${encodeURIComponent(user)}`);
+      if (resp.ok) setProfile(await resp.json());
+    } catch (err) {
+      console.error("Failed to fetch /profile:", err);
+    }
+  };
+
+  useEffect(() => {
+    setRegretNote("");
+    if (selectedScenario?.user) fetchProfile(selectedScenario.user);
+    else setProfile(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedScenario?.user, apiBase]);
+
+  // "The assistant cut me off here": log a regret for the fixed engine's cut-in
+  const logRegret = async () => {
+    if (!selectedScenario) return;
+    const silence = fixedCutSilenceRef.current ?? 800;
+    try {
+      const resp = await fetch(`${apiBase}/regret`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: selectedScenario.user,
+          session_id: selectedScenario.id,
+          state_text: fixedTranscript,
+          probs: {},
+          silence_ms: silence,
+          action: "RESPOND",
+        }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      setRegretNote(`Logged: cut off after ${silence} ms of silence. Profile updated.`);
+      await fetchProfile(selectedScenario.user);
+    } catch (err) {
+      setRegretNote(`Could not log regret (${err instanceof Error ? err.message : String(err)})`);
+    }
+  };
   const isMock = health?.cache_provenance?.is_mock ?? (health?.cache_provenance?.backend === "mock");
 
   const resetReplayState = () => {
@@ -150,6 +216,7 @@ export const App: React.FC = () => {
     setReplayError(null);
     activeSegmentStartRef.current = null;
     runOutcomeRef.current = { fixed: null, patientListener: null, fixedRespondedAt: null, plRespondedAt: null, error: null };
+    setPlReply({ text: "", source: null, modelId: null, firstTokenMs: null, done: false, error: null });
     setFixedState({
       responded: false,
       respondedAtMs: null,
@@ -238,6 +305,7 @@ export const App: React.FC = () => {
         if (ev.engine === "fixed") {
           fixedRespondedRef.current = true;
           runOutcomeRef.current.fixedRespondedAt = ev.t_ms;
+          fixedCutSilenceRef.current = (ev as { silence_ms?: number }).silence_ms ?? null;
           setFixedState((prev) => ({
             ...prev,
             responded: true,
@@ -252,6 +320,26 @@ export const App: React.FC = () => {
             respondedAtMs: ev.t_ms,
           }));
         }
+        break;
+      }
+      case "reply_chunk": {
+        setPlReply((prev) => ({
+          ...prev,
+          text: prev.text + ev.text,
+          source: ev.reply_source,
+          modelId: ev.model_id,
+        }));
+        break;
+      }
+      case "reply_done": {
+        setPlReply({
+          text: ev.full_reply,
+          source: ev.reply_source,
+          modelId: ev.model_id,
+          firstTokenMs: ev.first_token_ms,
+          done: true,
+          error: ev.error,
+        });
         break;
       }
       case "final": {
@@ -676,6 +764,38 @@ export const App: React.FC = () => {
               </div>
             )}
 
+            {/* Speaker pace profile: learned from this user's earlier sessions and logged regrets */}
+            {profile && (
+              <div className="bg-slate-950/70 border border-slate-800 rounded-md px-5 py-3 flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
+                <span className="label-mono">Speaker profile</span>
+                {profile.has_history ? (
+                  <>
+                    <span className="text-slate-300">
+                      Pauses then keeps talking: <strong className="text-slate-50">
+                        {profile.resumed_median_ms !== null ? `${Math.round(profile.resumed_median_ms)} ms` : "n/a"}
+                      </strong>{" "}
+                      <span className="text-slate-500">median</span>
+                    </span>
+                    <span className="text-slate-300">
+                      Pause when finished: <strong className="text-slate-50">
+                        {profile.finished_median_ms !== null ? `${Math.round(profile.finished_median_ms)} ms` : "n/a"}
+                      </strong>
+                    </span>
+                    <span className="text-slate-300">
+                      Filler rate: <strong className="text-slate-50">
+                        {profile.filler_rate !== null ? `${Math.round(profile.filler_rate * 100)}%` : "n/a"}
+                      </strong>
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-slate-400">No earlier sessions for this speaker (cold start).</span>
+                )}
+                <span className="text-slate-300">
+                  Regrets logged: <strong className="text-slate-50">{profile.regrets_count}</strong>
+                </span>
+              </div>
+            )}
+
             {/* Side-by-Side Dual Engine Comparison Panels */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Panel: Fixed 800ms Timeout */}
@@ -767,6 +887,16 @@ export const App: React.FC = () => {
                     </strong>
                   </div>
                 </div>
+
+                {/* Regret feedback: feeds the speaker's pace profile */}
+                {fixedState.interrupted && !isRunning && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button onClick={logRegret} className="btn-outline px-3 py-1.5 rounded-md text-xs">
+                      Log this cut-off as a regret
+                    </button>
+                    {regretNote && <span className="text-xs text-slate-300">{regretNote}</span>}
+                  </div>
+                )}
               </div>
 
               {/* Right Panel: Patient Listener (Decider 2B) */}
@@ -875,6 +1005,31 @@ export const App: React.FC = () => {
                       </span>
                     )}
                   </div>
+
+                  {/* Assistant reply (Amazon Bedrock, or a labeled mock) */}
+                  {(plReply.text || (plState.responded && !plState.interrupted)) && (
+                    <div className="mt-3 rounded-md border border-indigo-300/30 bg-indigo-950/30 p-3">
+                      <div className="label-mono mb-1.5 flex items-center justify-between gap-2">
+                        <span>Assistant reply</span>
+                        <span className={plReply.source === "bedrock" ? "text-indigo-300" : "text-amber-300"}>
+                          {plReply.source === "bedrock"
+                            ? `Amazon Bedrock · ${plReply.modelId?.replace(/^us\.anthropic\./, "") ?? ""}`
+                            : plReply.source === "mock"
+                              ? "Mock reply"
+                              : "Generating…"}
+                        </span>
+                      </div>
+                      <p className="text-sm leading-relaxed text-slate-100 min-h-[1.25rem]">
+                        {plReply.text || <span className="text-slate-500 italic">waiting for first token…</span>}
+                      </p>
+                      {plReply.done && (
+                        <div className="mt-1.5 font-mono text-[11px] text-slate-400">
+                          {plReply.firstTokenMs !== null ? `first token ${Math.round(plReply.firstTokenMs)} ms` : ""}
+                          {plReply.error ? ` · Bedrock failed, mock used (${plReply.error.slice(0, 60)})` : ""}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Right Panel Final Result Box */}

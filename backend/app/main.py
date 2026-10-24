@@ -393,6 +393,52 @@ def get_plot(name: str) -> FileResponse:
     return FileResponse(plot_path, media_type="image/png")
 
 
+_last_bedrock_call: dict[str, Any] = {"status": "not called yet"}
+
+
+async def _stream_reply_into(queue: asyncio.Queue, transcript: str, respond_t_ms: float) -> None:
+    """Stream a reply from the reply agent (Bedrock unless MOCK_BEDROCK) into the queue.
+
+    Puts reply_chunk events, then one reply_done event, then None. A Bedrock failure
+    never ends the replay: it falls back to the mock reply and labels it.
+    """
+    import time
+
+    agent = ReplyAgent(cfg=cfg)
+    source = "mock" if agent.mock else "bedrock"
+    model = None if agent.mock else cfg.env.bedrock_model_id
+    t0 = time.perf_counter()
+    first_ms: float | None = None
+    error: str | None = None
+    parts: list[str] = []
+    try:
+        async for chunk in agent.stream_reply(transcript):
+            if first_ms is None:
+                first_ms = (time.perf_counter() - t0) * 1000.0
+            parts.append(chunk)
+            await queue.put({"event": "reply_chunk", "engine": "patient_listener", "text": chunk,
+                             "reply_source": source, "model_id": model, "t_ms": respond_t_ms})
+    except Exception as exc:  # fall back to the mock reply, labeled
+        error = f"{type(exc).__name__}: {str(exc)[:160]}"
+        logger.warning(f"[replay] Bedrock reply failed ({error}); using mock reply")
+        source, model, parts = "mock", None, []
+        text = ReplyAgent._generate_mock_reply(transcript)
+        parts.append(text)
+        await queue.put({"event": "reply_chunk", "engine": "patient_listener", "text": text,
+                         "reply_source": source, "model_id": None, "t_ms": respond_t_ms})
+    total_ms = (time.perf_counter() - t0) * 1000.0
+    if source == "bedrock":
+        _last_bedrock_call.update({"status": "ok", "model_id": model, "first_token_ms": round(first_ms or 0.0, 1),
+                                   "total_ms": round(total_ms, 1), "error": None})
+    elif error:
+        _last_bedrock_call.update({"status": "failed", "error": error})
+    await queue.put({"event": "reply_done", "engine": "patient_listener", "full_reply": "".join(parts).strip(),
+                     "reply_source": source, "model_id": model,
+                     "first_token_ms": round(first_ms, 1) if first_ms is not None else None,
+                     "total_ms": round(total_ms, 1), "error": error, "t_ms": respond_t_ms})
+    await queue.put(None)
+
+
 @app.post("/replay/{scenario}")
 async def replay_scenario(scenario: str, request: Request, speed: float = 1.0) -> StreamingResponse:
     """Streams scripted scenario through Fixed Timeout and Patient Listener engines in parallel."""
@@ -442,16 +488,39 @@ async def replay_scenario(scenario: str, request: Request, speed: float = 1.0) -
 
         timeline, cache_miss_error = build_dual_engine_timeline(t, cache, cfg, model_id)
 
+        # The reply is generated only for the Patient Listener engine, starting the
+        # moment it decides RESPOND. Chunks are streamed after the timeline events.
+        words: list[str] = []
+        reply_queue: asyncio.Queue = asyncio.Queue()
+        reply_task: asyncio.Task | None = None
+
         last_t = 0.0
         for ev in timeline:
             dt = ev["t_ms"] - last_t
             if dt > 0 and effective_speed < 100.0:
                 await asyncio.sleep(dt / (1000.0 * effective_speed))
             last_t = ev["t_ms"]
+            if ev.get("engine") == "audio" and ev.get("text"):
+                words.append(str(ev["text"]))
+            if (
+                ev.get("event") == "respond"
+                and ev.get("engine") == "patient_listener"
+                and reply_task is None
+            ):
+                reply_task = asyncio.create_task(
+                    _stream_reply_into(reply_queue, " ".join(words), ev["t_ms"])
+                )
             yield f"data: {json.dumps(ev)}\n\n"
 
         if cache_miss_error:
             yield f"data: {json.dumps(cache_miss_error)}\n\n"
+
+        if reply_task is not None:
+            while True:
+                item = await reply_queue.get()
+                if item is None:
+                    break
+                yield f"data: {json.dumps(item)}\n\n"
 
     return StreamingResponse(
         sse_stream(),
@@ -596,11 +665,11 @@ def health_status() -> dict[str, Any]:
         latency_source = "mock"
 
     bedrock_status = {
-        "status": "SKIPPED",
+        "status": "mock" if cfg.env.mock_bedrock else "enabled",
         "model_id": cfg.env.bedrock_model_id,
         "region": cfg.env.aws_region,
         "mock_mode": cfg.env.mock_bedrock,
-        "error": "ValidationException: Operation not allowed / ResourceNotFoundException",
+        "last_call": dict(_last_bedrock_call),
     }
 
     return {
