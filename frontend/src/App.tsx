@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -120,7 +120,7 @@ export const App: React.FC = () => {
   const apiBase = (import.meta.env.VITE_API_URL as string) || "http://localhost:8000";
 
   // Fetch Health & Provenance
-  const fetchHealth = async () => {
+  const fetchHealth = useCallback(async () => {
     try {
       const resp = await fetch(`${apiBase}/health`);
       if (resp.ok) {
@@ -130,31 +130,35 @@ export const App: React.FC = () => {
     } catch (err) {
       console.error("Failed to fetch /health:", err);
     }
-  };
+  }, [apiBase]);
 
   // Fetch Scenarios Catalog
-  const fetchScenarios = async () => {
+  const fetchScenarios = useCallback(async () => {
     try {
       const resp = await fetch(`${apiBase}/scenarios`);
       if (resp.ok) {
         const json = await resp.json();
         const list: ScenarioItem[] = Array.isArray(json) ? json : json.scenarios || [];
         setScenarios(list);
-        if (list.length > 0 && !selectedScenarioId) {
-          // Default to first demo-flagged scenario
-          const firstDemo = list.find((s) => s.demo) || list[0];
-          setSelectedScenarioId(firstDemo.id);
+        if (list.length > 0) {
+          setSelectedScenarioId((curr) => {
+            if (!curr) {
+              const firstDemo = list.find((s) => s.demo) || list[0];
+              return firstDemo.id;
+            }
+            return curr;
+          });
         }
       }
     } catch (err) {
       console.error("Failed to fetch /scenarios:", err);
     }
-  };
+  }, [apiBase]);
 
   useEffect(() => {
     fetchHealth();
     fetchScenarios();
-  }, [apiBase]);
+  }, [fetchHealth, fetchScenarios]);
 
   const selectedScenario = scenarios.find((s) => s.id === selectedScenarioId);
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { BarChart3, AlertTriangle, ShieldCheck, Info, RefreshCw } from "lucide-react";
 
 interface MainResultRow {
@@ -54,9 +54,7 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ apiBase }) =
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchResults = async () => {
-    setIsLoading(true);
-    setError(null);
+  const loadData = useCallback(async () => {
     try {
       const resp = await fetch(`${apiBase}/results`);
       if (!resp.ok) {
@@ -64,16 +62,23 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ apiBase }) =
       }
       const json = await resp.json();
       setData(json);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsLoading(false);
     }
+  }, [apiBase]);
+
+  const fetchResults = () => {
+    setIsLoading(true);
+    setError(null);
+    loadData();
   };
 
   useEffect(() => {
-    fetchResults();
-  }, [apiBase]);
+    loadData();
+  }, [loadData]);
 
   if (isLoading) {
     return (
