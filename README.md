@@ -47,14 +47,14 @@ flowchart LR
 
 ## Run the demo (Windows PowerShell)
 
-Prerequisites: Python 3.11, Node 20+, and [uv](https://docs.astral.sh/uv/) (`pip install uv`).
+Prerequisites: Python 3.11, Node 20+, and optionally [uv](https://docs.astral.sh/uv/) (`pip install uv`).
 
 Or just open the live site: https://main.d179rqv15h3x1f.amplifyapp.com
 
 ```powershell
 git clone https://github.com/ajayg10/patient-listener.git
 cd patient-listener
-uv sync --extra dev
+uv sync --extra dev   # or: python -m venv .venv; .venv\Scripts\activate; pip install -e ".[dev]"
 $env:MOCK_BEDROCK="1"   # set to 0 to generate replies with Amazon Bedrock
 uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
@@ -74,11 +74,18 @@ The demo set is **selected**: 10 scenarios where fixed 800 cuts in and the Decid
 
 No GPU is needed: the replay reads the committed cache `backend/eval/data/decisions_cache_real.jsonl.gz`.
 
-## Reproduce the evaluation
+## Reproduce the evaluation & tests
 
 ```powershell
+# Replay evaluation on committed decisions
 uv run python -m backend.eval.run_eval --cache backend/eval/data/decisions_cache_real.jsonl
+
+# Backend tests (68 tests)
 uv run pytest -q
+
+# Frontend tests (11 tests)
+cd frontend
+npm test
 ```
 
 The eval takes a few seconds and writes `results.md` and the plots in `backend/eval/results/`. To regenerate the decision cache with the real model, follow [scripts/gpu_run.md](scripts/gpu_run.md) on a Colab or Kaggle T4 (about 35 minutes).
